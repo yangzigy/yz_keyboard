@@ -1,0 +1,9 @@
+*.bak
+cscope.out
+tags
+JLinkLog.txt
+JLinkSettings.ini
+RTE/
+obj/
+*.hex
+out/
