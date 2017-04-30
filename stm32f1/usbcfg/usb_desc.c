@@ -39,7 +39,8 @@ const u8 Joystick_ConfigDescriptor[JOYSTICK_SIZ_CONFIG_DESC] =
 	0x01,	//bConfiguration作为Set Configuration的一个参数选择配置值
 	0x00,	//iConfiguration用于描述该配置字符串描述符的索引
 	0x80,	//bmAttributes供电模式选择．Bit4-0保留，D7:总线供电，D6:自供电，D5:远程唤醒
-	0x32,	//bMaxPower总线供电的USB设备的最大消耗电流．以2mA为单位
+	//0x32,	//bMaxPower总线供电的USB设备的最大消耗电流．以2mA为单位
+	0xfa,	//bMaxPower总线供电的USB设备的最大消耗电流．以2mA为单位
 
 	//******************第一个接口描述符*********************/
 	0x09,	//bLength描述符大小．固定为0x09

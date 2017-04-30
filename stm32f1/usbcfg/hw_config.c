@@ -5,6 +5,7 @@
 #include "usb_desc.h"
 #include "platform_config.h"
 #include "usb_pwr.h"
+#include "usb_istr.h"
 
 //USB唤醒中断服务函数
 void USBWakeUp_IRQHandler(void) 
@@ -86,35 +87,6 @@ void USB_Cable_Config (FunctionalState NewState)
 		PAout(8)=0;
 		//printf("usb pull up disable\r\n"); 
 	}
-}
-/*******************************************************************************
- * Function Name : Joystick_Send.
- * Description   : prepares buffer to be sent containing Joystick event infos.
- * Input         : Keys: keys received from terminal.
- * Output        : None.
- * Return value  : None.
- *******************************************************************************/
-void Joystick_Send(u8 buf0, u8 buf1)
-{
-	u8 Buffer[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-
-	Buffer[0] = buf0;
-	/* prepare buffer to send */
-	Buffer[3] = buf1;
-
-	if(Buffer[0]==0)	//键盘
-	{
-		/*copy mouse position info in ENDP1 Tx Packet Memory Area*/
-		UserToPMABufferCopy(Buffer, GetEPTxAddr(ENDP1), 8);
-		/* enable endpoint for transmission */
-		SetEPTxValid(ENDP1);
-	}
-	else				//鼠标
-	{
-		UserToPMABufferCopy(Buffer, GetEPTxAddr(ENDP2), 5);
-		SetEPTxValid(ENDP2);
-	}
-
 }
 void keyboard_send(u8 *buf)
 {

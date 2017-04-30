@@ -368,6 +368,7 @@ void key_scan(void)
 			if(keys[KEY_m].state) {z=-delta;keys[KEY_m].state=0;}
 			mouse_xdelta=mouse_xdelta*0.94f + x*0.06f;
 			mouse_ydelta=mouse_ydelta*0.94f + y*0.06f;
+			mouse_zdelta=z;
 			//mouse_zdelta=mouse_zdelta*0.93f + z*0.07f;
 			mousebuf[2]=mouse_xdelta;
 			mousebuf[3]=mouse_ydelta;
