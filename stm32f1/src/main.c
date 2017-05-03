@@ -25,7 +25,7 @@ int main(void)
 	Stm32_Clock_Init(9);//系统时钟,所有都必须在此函数后
 	RCC->APB2ENR|=0x1ff;   //使能所有PORT口时钟
 	systime_initial(2000);//Hz
-	MGPIOC->CT13=GPIO_OUT_PP; //LED
+	MGPIOD->CT13=GPIO_OUT_PP; //LED
 	uart_initial(&uart1,256000);
 	uart_initial(&uart2,115200);
 	cmd_ini(&(uart1.que_rx)); //使用串口1作为命令串口
@@ -55,7 +55,8 @@ int main(void)
 		SYS_idle++;
 	}
 }
-
+u32 led_div=512-1; //led分频系数
+extern  vu32 bDeviceState;
 void SysTick_Handler(void)
 {
 	SYS_time++;
@@ -64,9 +65,14 @@ void SysTick_Handler(void)
 	{
 		SYS_idle_dis=(SYS_idle_dis+SYS_idle)/2;
 		SYS_idle=0;
-		//PCo^=1<<13;
 		//Joystick_Send(0,4);
 		//Joystick_Send(1,4);
+	}
+	if(bDeviceState==1) led_div=511; //加入USB连接指示
+	else led_div=4095;
+	if((SYS_time & led_div)==0)
+	{
+		PDo^=1<<13;
 	}
 }
 

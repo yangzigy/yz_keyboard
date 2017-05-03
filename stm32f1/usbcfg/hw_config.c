@@ -88,13 +88,27 @@ void USB_Cable_Config (FunctionalState NewState)
 		//printf("usb pull up disable\r\n"); 
 	}
 }
+u32 keyboard_send_pre_0=0;
+u32 keyboard_send_pre_1=0; //上次发送值
 void keyboard_send(u8 *buf)
 {
+	if (((u32*)buf)[0]==keyboard_send_pre_0 && ((u32*)buf)[1]==keyboard_send_pre_1) //若相同
+	{
+		return ;
+	}
+	keyboard_send_pre_0=((u32*)buf)[0];
+	keyboard_send_pre_1=((u32*)buf)[1];
 	UserToPMABufferCopy(buf, GetEPTxAddr(ENDP1), 8);
 	SetEPTxValid(ENDP1);
 }
+u32 mouse_send_pre=0; //上次发送值
 void mouse_send(u8 *buf)
 {
+	if (((u32*)(buf+1))[0]==mouse_send_pre && mouse_send_pre==0) //若相同并且为0
+	{
+		return ;
+	}
+	mouse_send_pre=((u32*)(buf+1))[0];
 	UserToPMABufferCopy(buf, GetEPTxAddr(ENDP2), 5);
 	SetEPTxValid(ENDP2);
 }
