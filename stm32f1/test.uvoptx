@@ -193,6 +193,11 @@
           <WinNumber>1</WinNumber>
           <ItemText>mousebuf</ItemText>
         </Ww>
+        <Ww>
+          <count>3</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>SYS_time&amp;7</ItemText>
+        </Ww>
       </WatchWindow1>
       <Tracepoint>
         <THDelay>0</THDelay>

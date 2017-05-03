@@ -345,6 +345,7 @@ void key_scan(void)
 	if(keys[OFFSET_FN].state) //Fn按下，组合键需要将state置零，防止后续重新添加
 	{
 		int delta=mouse_delta_0;
+		int x=0,y=0,z=0; //鼠标速度
 		if(keys[KEY_a].state) //鼠标速度
 		{
 			delta=mouse_delta_1;
@@ -357,22 +358,23 @@ void key_scan(void)
 		if(keys[KEY_d].state) {mousebuf[1] |= (1<<0);keys[KEY_d].state=0;}
 		if(keys[KEY_f].state) {mousebuf[1] |= (1<<2);keys[KEY_f].state=0;}
 		if(keys[KEY_g].state) {mousebuf[1] |= (1<<1);keys[KEY_g].state=0;}
-		if(keys[KEY_s].state || mousebuf[1]) //鼠标上下左右：fn+s+hjkl
+		if(keys[KEY_n].state) {z=delta; keys[KEY_n].state=0;}
+		if(keys[KEY_m].state) {z=-delta;keys[KEY_m].state=0;}
+		if(keys[KEY_s].state || mousebuf[1] || z) //鼠标上下左右：fn+s+hjkl
 		{
-			int x=0,y=0,z=0; //鼠标速度
+			static u32 mouse_tick=0;
+			mouse_tick++;
 			if(keys[KEY_h].state) {x=-delta;}
 			if(keys[KEY_j].state) {y=delta;}
 			if(keys[KEY_k].state) {y=-delta;}
 			if(keys[KEY_l].state) {x=delta;}
-			if(keys[KEY_n].state) {z=delta; keys[KEY_n].state=0;}
-			if(keys[KEY_m].state) {z=-delta;keys[KEY_m].state=0;}
 			mouse_xdelta=mouse_xdelta*0.94f + x*0.06f;
 			mouse_ydelta=mouse_ydelta*0.94f + y*0.06f;
-			mouse_zdelta=z;
-			//mouse_zdelta=mouse_zdelta*0.93f + z*0.07f;
+			//mouse_zdelta=z;
+			mouse_zdelta=mouse_zdelta*0.94f + z*0.06f;
 			mousebuf[2]=mouse_xdelta;
 			mousebuf[3]=mouse_ydelta;
-			mousebuf[4]=mouse_zdelta/4;
+			mousebuf[4]=(mouse_tick&7)==0?mouse_zdelta+0.6:0;
 			mouse_send(mousebuf);
 		}
 		else //非鼠标操作
