@@ -413,7 +413,7 @@ void key_scan(void)
 			if(keys[KEY_i].state) { putkey(KEY_Insert); keys[KEY_i].state=0; }
 			if(keys[KEY_p].state) { putkey(KEY_PrintScree); keys[KEY_p].state=0; }
 			if(keys[KEY_BackSpace].state) { putkey(KEY_Delete); keys[KEY_BackSpace].state=0; }
-			if(keys[KEY_Wave].state) { putkey(KEY_Delete); keys[KEY_Wave].state=0; }
+			if(keys[KEY_Wave].state) { keybuf[0] |= (1<<1);  putkey(KEY_Delete); keys[KEY_Wave].state=0; }
 			if(keys[KEY_u].state) { putkey(KEY_UpArrow); keybuf[0] |= (1<<2);keys[KEY_u].state=0; }
 		}
 		//发送
