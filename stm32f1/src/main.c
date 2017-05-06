@@ -120,10 +120,12 @@ void cmdfun_mousetest(s8 *para)
 }
 void cmdfun_ledtest(s8 *para) //显示发送缓冲
 {
-	int a,b;
-	if(sscanf(para,"%d %d",&a,&b)==2)
+	int b;
+	char c;
+	if(sscanf(para,"%c %d",&c,&b)==2)
 	{
-		keys[a].led=b;
+		extern const u8 ascii_index[256];
+		keys[ascii_index[c]].led=b;
 	}
 }
 static const CMD_STR blcmd_str[]=\
