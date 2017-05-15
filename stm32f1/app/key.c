@@ -318,6 +318,7 @@ void check_press(BUTTON_STATE *bts) //判断按键是否按下
 		}
 	}
 }
+int key_cfg_stat=0; //app键状态，0释放，1按下，2有组合
 float mouse_xdelta=0; //鼠标实际移动量
 float mouse_ydelta=0; //鼠标实际移动量
 float mouse_zdelta=0; //鼠标实际移动量
@@ -342,7 +343,7 @@ void key_scan(void)
 	//fn
 	mousebuf[0]=1;
 	mousebuf[1]=0;
-	if(keys[OFFSET_FN].state) //Fn按下，组合键需要将state置零，防止后续重新添加
+	if(keys[OFFSET_FN].state || keys[KEY_cfg].state) //Fn按下，组合键需要将state置零，防止后续重新添加
 	{
 		int delta=mouse_delta_0;
 		int x=0,y=0,z=0; //鼠标速度
@@ -398,6 +399,8 @@ void key_scan(void)
 				if(keys[KEY_k].state) { putkey(KEY_UpArrow); }
 				if(keys[KEY_l].state) { putkey(KEY_RightArrow); }
 			}
+			if(keys[KEY_Comma].state) { putkey(KEY_Home); keys[KEY_Comma].state=0;}
+			if(keys[KEY_StopPoint].state) { putkey(KEY_End); keys[KEY_StopPoint].state=0;}
 			if(keys[KEY_1].state) { putkey(KEY_F1); keys[KEY_1].state=0;}
 			if(keys[KEY_2].state) { putkey(KEY_F2); keys[KEY_2].state=0;}
 			if(keys[KEY_3].state) { putkey(KEY_F3); keys[KEY_3].state=0;}
@@ -415,6 +418,10 @@ void key_scan(void)
 			if(keys[KEY_BackSpace].state) { putkey(KEY_Delete); keys[KEY_BackSpace].state=0; }
 			if(keys[KEY_Wave].state) { keybuf[0] |= (1<<1);  putkey(KEY_Delete); keys[KEY_Wave].state=0; }
 			if(keys[KEY_u].state) { putkey(KEY_UpArrow); keybuf[0] |= (1<<2);keys[KEY_u].state=0; }
+			if(keybufp>2 && keys[KEY_cfg].state) //APP键按下且有组合
+			{
+				key_cfg_stat=2;
+			}
 		}
 		//发送
 		//keyboard_send(keybuf); //最后发送缓冲
@@ -433,6 +440,16 @@ void key_scan(void)
 		mousebuf[3]=mouse_ydelta;
 		mousebuf[4]=mouse_zdelta;
 		mouse_send(mousebuf);
+	}
+	if(keys[KEY_cfg].state==0) //cfg键释放事件
+	{
+		keys[KEY_cfg].state=key_cfg_stat==1?1:0;
+		key_cfg_stat=0;
+	}
+	else //cfg键按下事件
+	{
+		key_cfg_stat=key_cfg_stat==2?2:1;
+		keys[KEY_cfg].state=0;
 	}
 	//普通键追加到buf
 	for(i = 0; i < keys_none0; i++)

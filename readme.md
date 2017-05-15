@@ -13,18 +13,20 @@ diy机械键盘，类似HHKB的布局，修改fn的位置，修改功能键定�
 将生成的文件导入Altium designer后，作为机械层辅助布局  
 
 仿HHKB的设计，使用59键，通过fn键复用按键。将fn位置放在左手大拇指处  
+app键也作为fn使用，方便单手操作。只有APP键单独按下或无有效组合时用作APP键。
 复用按键：(失去所有复用按键的组合功能)  
 1. F1~F12: 通过第一排按键实现  
 2. del: 通过backspace和~实现,其中fn+~为shift+del  
 3. 方向键： 通过vim风格的hjkl键实现  
 4. home、end、pgup、pgdn：fn+a+hjkl(失去a+上下左右功能)  
-5. insert、prtscren：fn+i,fn+p  
-6. 上一级（alt+up）: fn+u  
-7. 鼠标上下左右滚轮：fn+s+hjklnm(失去s+上下左右功能)  
-8. 鼠标大幅上下左右：fn+a+s+hjklnm  
-9. 鼠标按键：fn+dfgnm：左键中键右键,滚轮  
-10. 鼠标拖动：fn+dfg+hjklnm  
-11. 鼠标大幅拖动：fn+a+dfg+hjklnm  
+5. home、end：fn+< > 方便单手操作
+6. insert、prtscren：fn+i,fn+p  
+7. 上一级（alt+up）: fn+u  
+8. 鼠标上下左右滚轮：fn+s+hjklnm(失去s+上下左右功能)  
+9. 鼠标大幅上下左右：fn+a+s+hjklnm  
+10. 鼠标按键：fn+dfgnm：左键中键右键,滚轮  
+11. 鼠标拖动：fn+dfg+hjklnm  
+12. 鼠标大幅拖动：fn+a+dfg+hjklnm  
 
 ## 实现  
 为了实现全键任意组合，单片机的每一个引脚连接一个按键，单独进行扫描。  

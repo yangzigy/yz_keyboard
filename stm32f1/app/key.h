@@ -236,7 +236,7 @@ typedef struct
 	u32 tick; //记录上次按下的tick值
 	MGPIO_TypeDef *port; //按键的端口
 	u8 pin; //按键的引脚
-	u8 state; //按键状态
+	u8 state; //按键状态0或1
 	u8 led; //亮度0~20
 } BUTTON_STATE; //记录按键状态的结构
 #pragma pack()
