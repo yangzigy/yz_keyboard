@@ -107,23 +107,22 @@ void uart_initial(S_UART *obj,int b)
 void uart_send(u8 *p,int n,S_UART *obj) //发送数据
 {
 	int i;
-	OS_CLOSE_INT; //进入保护区，防止中断取数时冲突
+	obj->uart->CR1 &= ~(1<<7);//TXE
 	for(i=0;i<n;i++)
 	{
 		Queue_set_1(p[i],&(obj->que_tx));
 	}
 	obj->uart->CR1 |= (1<<7);//TXE
-	OS_OPEN_INT;
 }
 void uart_irq(S_UART *obj)
 {
 	u16 t;
-	if(obj->uart->SR & 0x20)//接收
+	if(obj->uart->SR & 0x28)//接收
 	{
-		t=(u8)(obj->uart->DR);
-		Queue_set_1(t,&(obj->que_rx));
+		t=(u8)(obj->uart->DR); //此时清了接收和过载的中断标志
+		Queue_set_1(t,obj->pque_rx);
 	}
-	if(obj->uart->SR & 0x80)//发送空中断TXE
+	if(obj->uart->CR1 & (1<<7) && obj->uart->SR & 0x80)//发送空中断TXE
 	{
 		u8 tmp;
 		if(Queue_get_1(&tmp,&(obj->que_tx))==0)
@@ -135,8 +134,7 @@ void uart_irq(S_UART *obj)
 			obj->uart->CR1 &= ~(1<<7);//TXE
 		}
 	}
-	t=obj->uart->DR;
-	obj->uart->SR =0;	//清除中断标志
+	//这里不清中断，防止此时有其他中断发生
 }
 
 void USART1_IRQHandler(void)

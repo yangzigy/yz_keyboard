@@ -118,7 +118,7 @@ void cmdfun_mousetest(s8 *para)
 	}
 	printf("\r\n");
 }
-void cmdfun_ledtest(s8 *para) //显示发送缓冲
+void cmdfun_ledtest(s8 *para) //设置led亮度
 {
 	int b;
 	char c;
