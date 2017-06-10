@@ -120,7 +120,7 @@ void uart_irq(S_UART *obj)
 	if(obj->uart->SR & 0x28)//接收
 	{
 		t=(u8)(obj->uart->DR); //此时清了接收和过载的中断标志
-		Queue_set_1(t,obj->pque_rx);
+		Queue_set_1(t,&(obj->que_rx));
 	}
 	if(obj->uart->CR1 & (1<<7) && obj->uart->SR & 0x80)//发送空中断TXE
 	{
