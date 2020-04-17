@@ -322,9 +322,9 @@ int key_cfg_stat=0; //app键状态，0释放，1按下，2有组合
 float mouse_xdelta=0; //鼠标实际移动量
 float mouse_ydelta=0; //鼠标实际移动量
 float mouse_zdelta=0; //鼠标实际移动量
-int mouse_delta_0=5; //鼠标移动量0
+int mouse_delta_0=3; //鼠标移动量0
 int mouse_delta_1=15; //鼠标移动量1
-void key_scan(void)
+void key_scan(void) //100Hz
 {
 	int i;
 	keybufp=2; //位置
@@ -468,7 +468,7 @@ void key_poll(void) //任务函数2000Hz
 {
 	static u32 tick=0;
 	int i;
-	if(tick==0)
+	if(tick==0) //100Hz
 	{
 		//配置输入上拉
 		for(i = 0; i < keys_none0; i++) //判断每个按键，是否亮
@@ -477,7 +477,7 @@ void key_poll(void) //任务函数2000Hz
 			set_gpio(keys[j].port,keys[j].pin,GPIO_IN_PP);
 			keys[j].port->BSRR=(1<<keys[j].pin); //输入上拉
 		}
-		key_scan();
+		key_scan(); //100Hz
 	}
 	for(i = 0; i < keys_none0; i++) //判断每个按键，是否亮
 	{
