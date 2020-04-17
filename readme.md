@@ -3,7 +3,7 @@ yz_keyboard
 
 diy机械键盘，类似HHKB的布局，修改fn的位置，增加功能组合键定义，并加入鼠标功能。可实现动态led图案。  
 ![image](https://github.com/yangzigy/yz_keyboard/raw/master/pictures/IMG_20170524_213813_HHT.jpg)  
-
+说明地址：https://www.cnblogs.com/yangzifb/p/11485313.html#4425981
 **设计思想：**  
 1. 优先使用大拇指完成任务，实现组合键  
 2. 减轻小拇指负担，将Ctrl移动到caplock处，取消caplock  
