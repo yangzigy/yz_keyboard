@@ -1,7 +1,7 @@
 
 #include "key.h"
 #include "led.h"
-#include "usb_conf.h"
+#include "usb_kb_m.h"
 
 int keys_per_sec=0; //每秒按键数
 float keys_per_sec_f=0; //每秒按键数滤波结果
