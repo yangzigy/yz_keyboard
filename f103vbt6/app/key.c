@@ -281,7 +281,7 @@ void key_ini(void)
 		keys_none0++;
 	}
 }
-s8 mousebuf[5]={1,0,0,0,0}; //鼠标发送缓存
+u8 mousebuf[5]={1,0,0,0,0}; //鼠标发送缓存
 u8 keybuf[8]={0,0,0,0,0,0,0,0}; //按键发送缓存
 int keybufp=2; //位置
 void putkey(u32 key) //发现一个键按下

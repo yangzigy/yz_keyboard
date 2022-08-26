@@ -1,7 +1,8 @@
 
-#include "usb_regs.h"
+#include "f1_usb.h"
 #include "usb_core.h"
 
+int Total_Configuration=1; //配置数
 extern DEVICE_PROP *pProperty;
 extern DEVICE_INFO *pInformation;
 extern USER_STANDARD_REQUESTS  *pUser_Standard_Requests;
@@ -66,7 +67,7 @@ u8 *Standard_GetConfiguration(u16 Length)
 RESULT Standard_SetConfiguration(void)
 {
 	if ((pInformation->USBwValue0 <=
-				Device_Table.Total_Configuration) && (pInformation->USBwValue1 == 0)
+				Total_Configuration) && (pInformation->USBwValue1 == 0)
 			&& (pInformation->USBwIndex == 0)) /*call Back usb spec 2.0*/
 	{
 		pInformation->Current_Configuration = pInformation->USBwValue0;
@@ -238,7 +239,6 @@ RESULT Standard_ClearFeature(void)
 	}
 	else if (Type_Rec == (STANDARD_REQUEST | ENDPOINT_RECIPIENT))
 	{/*EndPoint Clear Feature*/
-		DEVICE* pDev;
 		u32 Related_Endpoint;
 		u32 wIndex0;
 		u32 rEP;
@@ -249,7 +249,6 @@ RESULT Standard_ClearFeature(void)
 			return USB_UNSUPPORT;
 		}
 
-		pDev = &Device_Table;
 		wIndex0 = pInformation->USBwIndex0;
 		rEP = wIndex0 & ~0x80;
 		Related_Endpoint = ENDP0 + rEP;
@@ -265,7 +264,7 @@ RESULT Standard_ClearFeature(void)
 			Status = _GetEPRxStatus(Related_Endpoint);
 		}
 
-		if ((rEP >= pDev->Total_Endpoint) || (Status == 0)
+		if ((rEP >= EP_num) || (Status == 0)
 				|| (pInformation->Current_Configuration == 0))
 		{
 			return USB_UNSUPPORT;
@@ -336,7 +335,7 @@ RESULT Standard_SetEndPointFeature(void)
 		Status = _GetEPRxStatus(Related_Endpoint);
 	}
 
-	if (Related_Endpoint >= Device_Table.Total_Endpoint
+	if (Related_Endpoint >= EP_num
 			|| pInformation->USBwValue != 0 || Status == 0
 			|| pInformation->Current_Configuration == 0)
 	{
@@ -729,7 +728,7 @@ void Data_Setup0(void)
 				Status = _GetEPRxStatus(Related_Endpoint);
 			}
 
-			if ((Related_Endpoint < Device_Table.Total_Endpoint) && (Reserved == 0)
+			if ((Related_Endpoint < EP_num) && (Reserved == 0)
 					&& (Status != 0))
 			{
 				CopyRoutine = Standard_GetStatus;
@@ -960,36 +959,25 @@ u8 Out0_Process(void)
  *******************************************************************************/
 u8 Post0_Process(void)
 {
-
 	SetEPRxCount(ENDP0, Device_Property.MaxPacketSize);
-
 	if (pInformation->ControlState == STALLED)
 	{
 		vSetEPRxStatus(EP_RX_STALL);
 		vSetEPTxStatus(EP_TX_STALL);
 	}
-
 	return (pInformation->ControlState == PAUSE);
 }
-
-/*******************************************************************************
- * Function Name  : SetDeviceAddress.
- * Description    : Set the device and all the used Endpoints addresses.
- * Input          : - Val: device address.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void SetDeviceAddress(u8 Val)
+void SetDeviceAddress(u8 Val) //设置设备地址和端点地址
 {
 	u32 i;
-	u32 nEP = Device_Table.Total_Endpoint;
-
-	/* set address in every used endpoint */
-	for (i = 0; i < nEP; i++)
+	for (i = 0; i < EP_num; i++) //设置每个端点的id，EP0R等
 	{
-		_SetEPAddress((u8)i, (u8)i);
-	} /* for */
-	_SetDADDR(Val | DADDR_EF); /* set device address and enable function */ 
+		//_SetEPAddress((u8)i, (u8)i);
+		USB_EP(i)=(1<<15) | //CTR_RX，正确接收，写1无效
+					(1<<7) | //CTR_TX，正确发送，写1无效
+					(USB_EP(i) & (0xf80)) | i; //当前值有不能写1的(写0无效)
+	}
+	USB->DADDR=Val | (1<<7); //设置设备地址，并使能
 }
 void NOP_Process(void)
 {

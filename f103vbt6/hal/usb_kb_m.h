@@ -5,12 +5,6 @@
 #include "stm32f1_sys.h"
 #include "usb_core.h"
 
-#define EP_NUM     (3) //总端点数
-
-/* buffer table base address */
-/* buffer table base address */
-#define BTABLE_ADDRESS      (0x00)
-
 /* EP0  */
 /* rx/tx buffer base address */
 #define ENDP0_RXADDR        (0x18)
@@ -29,54 +23,9 @@
 #define IMR_MSK (CNTR_CTRM  | CNTR_WKUPM | CNTR_SUSPM | CNTR_ERRM  | CNTR_SOFM \
                  | CNTR_ESOFM | CNTR_RESETM )
 
-/* CTR service routines */
-/* associated to defined endpoints */
-#define  EP1_IN_Callback   NOP_Process
-#define  EP2_IN_Callback   NOP_Process
-#define  EP3_IN_Callback   NOP_Process
-#define  EP4_IN_Callback   NOP_Process
-#define  EP5_IN_Callback   NOP_Process
-#define  EP6_IN_Callback   NOP_Process
-#define  EP7_IN_Callback   NOP_Process
-
-//#define  EP1_OUT_Callback   NOP_Process
-#define  EP2_OUT_Callback   NOP_Process
-#define  EP3_OUT_Callback   NOP_Process
-#define  EP4_OUT_Callback   NOP_Process
-#define  EP5_OUT_Callback   NOP_Process
-#define  EP6_OUT_Callback   NOP_Process
-#define  EP7_OUT_Callback   NOP_Process
-
 void keyboard_send(u8 *buf);
 void mouse_send(u8 *buf);
 
-typedef enum _RESUME_STATE
-{
-	RESUME_EXTERNAL,
-	RESUME_INTERNAL,
-	RESUME_LATER,
-	RESUME_WAIT,
-	RESUME_START,
-	RESUME_ON,
-	RESUME_OFF,
-	RESUME_ESOF
-} RESUME_STATE;
-
-typedef enum _DEVICE_STATE
-{
-	UNCONNECTED,
-	ATTACHED,
-	POWERED,
-	SUSPENDED,
-	ADDRESSED,
-	CONFIGURED
-} DEVICE_STATE;
-
-void Suspend(void);
-void Resume_Init(void);
-void Resume(RESUME_STATE eResumeSetVal);
-RESULT PowerOn(void);
-RESULT PowerOff(void);
 extern  vu32 bDeviceState; /* USB device status */
 extern vu32 fSuspendEnabled;  /* true when suspend is possible */
 
@@ -91,6 +40,7 @@ typedef enum _HID_REQUESTS
 	SET_PROTOCOL
 } HID_REQUESTS;
 
+void usb_ini(void);
 void Joystick_init(void);
 void Joystick_Reset(void);
 void Joystick_SetConfiguration(void);

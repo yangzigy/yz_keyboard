@@ -541,8 +541,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>.\hal\usb_regs.c</PathWithFileName>
-      <FilenameWithoutPath>usb_regs.c</FilenameWithoutPath>
+      <PathWithFileName>.\hal\f1_usb.c</PathWithFileName>
+      <FilenameWithoutPath>f1_usb.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -553,8 +553,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>.\hal\usb_regs.h</PathWithFileName>
-      <FilenameWithoutPath>usb_regs.h</FilenameWithoutPath>
+      <PathWithFileName>.\hal\f1_usb.h</PathWithFileName>
+      <FilenameWithoutPath>f1_usb.h</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>

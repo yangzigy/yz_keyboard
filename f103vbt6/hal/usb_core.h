@@ -1,7 +1,46 @@
 #ifndef __USB_CORE_H
 #define __USB_CORE_H
 
-#include "usb_regs.h"
+#include "f1_usb.h"
+
+typedef enum _RECIPIENT_TYPE
+{
+	DEVICE_RECIPIENT,     /* Recipient device */
+	INTERFACE_RECIPIENT,  /* Recipient interface */
+	ENDPOINT_RECIPIENT,   /* Recipient endpoint */
+	OTHER_RECIPIENT
+} RECIPIENT_TYPE;
+typedef enum _STANDARD_REQUESTS
+{
+	GET_STATUS = 0,
+	CLEAR_FEATURE,
+	RESERVED1,
+	SET_FEATURE,
+	RESERVED2,
+	SET_ADDRESS,
+	GET_DESCRIPTOR,
+	SET_DESCRIPTOR,
+	GET_CONFIGURATION,
+	SET_CONFIGURATION,
+	GET_INTERFACE,
+	SET_INTERFACE,
+	TOTAL_sREQUEST,  /* Total number of Standard request */
+	SYNCH_FRAME = 12
+} STANDARD_REQUESTS;
+/* Definition of "USBwValue" */
+typedef enum _DESCRIPTOR_TYPE
+{
+	DEVICE_DESCRIPTOR = 1,
+	CONFIG_DESCRIPTOR,
+	STRING_DESCRIPTOR,
+	INTERFACE_DESCRIPTOR,
+	ENDPOINT_DESCRIPTOR
+} DESCRIPTOR_TYPE;
+typedef enum _FEATURE_SELECTOR //Feature selector of a SET_FEATURE or CLEAR_FEATURE
+{
+	ENDPOINT_STALL,
+	DEVICE_REMOTE_WAKEUP
+} FEATURE_SELECTOR;
 
 typedef enum _CONTROL_STATE
 {
@@ -67,14 +106,7 @@ typedef struct _ENDPOINT_INFO
 	u8   *(*CopyData)(u16 Length);
 }ENDPOINT_INFO;
 
-/*-*-*-*-*-*-*-*-*-*-*-* Definitions for device level -*-*-*-*-*-*-*-*-*-*-*-*/
-
-typedef struct _DEVICE
-{
-	u8 Total_Endpoint;     /* Number of endpoints that are used */
-	u8 Total_Configuration;/* Number of configuration available */
-}
-DEVICE;
+extern int Total_Configuration;/* Number of configuration available */
 
 typedef union
 {
@@ -179,6 +211,12 @@ typedef struct _USER_STANDARD_REQUESTS
 }
 USER_STANDARD_REQUESTS;
 
+#define REQUEST_TYPE      0x60  /* Mask to get request type */
+#define STANDARD_REQUEST  0x00  /* Standard request */
+#define CLASS_REQUEST     0x20  /* Class request */
+#define VENDOR_REQUEST    0x40  /* Vendor request */
+
+#define RECIPIENT         0x1F  /* Mask to get recipient */
 /* Exported constants --------------------------------------------------------*/
 #define Type_Recipient (pInformation->USBbmRequestType & (REQUEST_TYPE | RECIPIENT))
 
@@ -216,7 +254,6 @@ void NOP_Process(void);
 
 extern DEVICE_PROP Device_Property;
 extern  USER_STANDARD_REQUESTS User_Standard_Requests;
-extern  DEVICE  Device_Table;
 extern DEVICE_INFO Device_Info;
 
 /* cells saving status during interrupt servicing */

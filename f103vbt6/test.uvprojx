@@ -513,14 +513,14 @@
               <FilePath>.\hal\usb_kb_m.h</FilePath>
             </File>
             <File>
-              <FileName>usb_regs.c</FileName>
+              <FileName>f1_usb.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\hal\usb_regs.c</FilePath>
+              <FilePath>.\hal\f1_usb.c</FilePath>
             </File>
             <File>
-              <FileName>usb_regs.h</FileName>
+              <FileName>f1_usb.h</FileName>
               <FileType>5</FileType>
-              <FilePath>.\hal\usb_regs.h</FilePath>
+              <FilePath>.\hal\f1_usb.h</FilePath>
             </File>
           </Files>
         </Group>

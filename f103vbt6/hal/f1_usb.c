@@ -1,11 +1,8 @@
 
-#include "usb_regs.h"
+#include "f1_usb.h"
 #include "usb_core.h"
 
-void SetBTABLE(u16 wRegValue)
-{
-	_SetBTABLE(wRegValue);
-}
+int EP_num=1; //总共多少个端点
 void SetEPType(u8 bEpNum, u16 wType)
 {
 	_SetEPType(bEpNum, wType);
@@ -183,10 +180,8 @@ u16  wInterrupt_Mask;
 DEVICE_INFO	Device_Info;
 USER_STANDARD_REQUESTS  *pUser_Standard_Requests;
 
-void usb_init(void)
+void usb_hal_ini(void)
 {
-	MGPIOA->CT8=GPIO_OUT_PP; //USB线的使能引脚
-
 	RCC->CFGR&=~(1<<22); //USBclk=PLLclk/1.5=48Mhz
 	RCC->APB1ENR|=1<<23; //USB时钟使能
 

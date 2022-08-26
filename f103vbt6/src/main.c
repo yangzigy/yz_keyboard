@@ -4,7 +4,6 @@
 #include "cmd.h"
 #include "key.h"
 
-extern void usb_init(void);
 int get_que_data(u8 *p,Queue *q);
 #define TASK_POOL_2K 2
 u32 led_div=512-1; //led分频系数
@@ -31,7 +30,7 @@ int main(void)
 	cmd_ini();
 	cmd_reg((CMD_LIST*)&bl_sys_cmd_list);
 	//printf(HelloString);
-	usb_init();
+	usb_ini();
 	key_ini();
 	while(1)
 	{

@@ -13,34 +13,61 @@ void EP1_OUT_Callback(void)
 }
 void (*pEpInt_IN[7])(void) =
 {
-	EP1_IN_Callback,
-	EP2_IN_Callback,
-	EP3_IN_Callback,
-	EP4_IN_Callback,
-	EP5_IN_Callback,
-	EP6_IN_Callback,
-	EP7_IN_Callback,
+	NOP_Process,
+	NOP_Process,
+	NOP_Process,
+	NOP_Process,
+	NOP_Process,
+	NOP_Process,
+	NOP_Process,
 };
 
 void (*pEpInt_OUT[7])(void) =
 {
 	EP1_OUT_Callback,
-	EP2_OUT_Callback,
-	EP3_OUT_Callback,
-	EP4_OUT_Callback,
-	EP5_OUT_Callback,
-	EP6_OUT_Callback,
-	EP7_OUT_Callback,
+	NOP_Process,
+	NOP_Process,
+	NOP_Process,
+	NOP_Process,
+	NOP_Process,
+	NOP_Process,
 };
 
 vu16 SaveRState;
 vu16 SaveTState;
 
+typedef enum _RESUME_STATE
+{
+	RESUME_EXTERNAL,
+	RESUME_INTERNAL,
+	RESUME_LATER,
+	RESUME_WAIT,
+	RESUME_START,
+	RESUME_ON,
+	RESUME_OFF,
+	RESUME_ESOF
+} RESUME_STATE;
+
+typedef enum _DEVICE_STATE
+{
+	UNCONNECTED,
+	ATTACHED,
+	POWERED,
+	SUSPENDED,
+	ADDRESSED,
+	CONFIGURED
+} DEVICE_STATE;
+
+void Suspend(void);
+void Resume_Init(void);
+void Resume(RESUME_STATE eResumeSetVal);
+RESULT PowerOn(void);
+RESULT PowerOff(void);
 void CTR_LP(void)
 {
 	vu16 wEPVal = 0;
 	/* stay in loop while pending interrupts */
-	while (((wIstr = _GetISTR()) & ISTR_CTR) != 0)
+	while (((wIstr = USB->ISTR) & ISTR_CTR) != 0)
 	{
 		/* extract highest priority endpoint number */
 		EPindex = (uint8_t)(wIstr & ISTR_EP_ID);
@@ -143,24 +170,23 @@ void USBWakeUp_IRQHandler(void)
 //USB中断处理函数
 void USB_LP_CAN1_RX0_IRQHandler(void) 
 {
-	wIstr = _GetISTR();
+	wIstr = USB->ISTR;
 	if (wIstr & ISTR_RESET & wInterrupt_Mask)
 	{
-		_SetISTR((u16)CLR_RESET);
+		USB->ISTR=(u16)CLR_RESET;
 		Device_Property.Reset();
 	}
 
 	if (wIstr & ISTR_ERR & wInterrupt_Mask)
 	{
-		_SetISTR((u16)CLR_ERR);
+		USB->ISTR=(u16)CLR_ERR;
 	}
 
 	if (wIstr & ISTR_WKUP & wInterrupt_Mask)
 	{
-		_SetISTR((u16)CLR_WKUP);
+		USB->ISTR=(u16)CLR_WKUP;
 		Resume(RESUME_EXTERNAL);
 	}
-
 	if (wIstr & ISTR_SUSP & wInterrupt_Mask)
 	{
 
@@ -175,18 +201,18 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 			Resume(RESUME_LATER);
 		}
 		/* clear of the ISTR bit must be done after setting of CNTR_FSUSP */
-		_SetISTR((u16)CLR_SUSP);
+		USB->ISTR=(u16)CLR_SUSP;
 	}
 
 	if (wIstr & ISTR_SOF & wInterrupt_Mask)
 	{
-		_SetISTR((u16)CLR_SOF);
+		USB->ISTR=(u16)CLR_SOF;
 		bIntPackSOF++;
 	}
 
 	if (wIstr & ISTR_ESOF & wInterrupt_Mask)
 	{
-		_SetISTR((u16)CLR_ESOF);
+		USB->ISTR=(u16)CLR_ESOF;
 		/* resume handling timing is made with ESOFs */
 		Resume(RESUME_ESOF); /* request without change of the machine state */
 	}
@@ -544,12 +570,6 @@ u32 ProtocolValue;
 extern DEVICE_INFO *pInformation;
 extern u16  wInterrupt_Mask;
 
-DEVICE Device_Table =
-{
-	EP_NUM,
-	1
-};
-
 DEVICE_PROP Device_Property =
 {
 	Joystick_init,
@@ -646,9 +666,9 @@ void Joystick_init(void)
 	/* Connect the device */
 	PowerOn();
 	/* USB interrupts initialization */
-	_SetISTR(0);               /* clear pending interrupts */
+	USB->ISTR=0;               /* clear pending interrupts */
 	wInterrupt_Mask = IMR_MSK;
-	_SetCNTR(wInterrupt_Mask); /* set interrupts mask */
+	USB->CNTR=wInterrupt_Mask; /* set interrupts mask */
 
 	bDeviceState = UNCONNECTED;
 }
@@ -669,7 +689,7 @@ void Joystick_Reset(void)
 	/* Current Feature initialization */
 	pInformation->Current_Feature = Joystick_ConfigDescriptor[7];
 
-	SetBTABLE(BTABLE_ADDRESS);
+	USB->BTABLE =0;
 
 	/* Initialize Endpoint 0 */
 	SetEPType(ENDP0, EP_CONTROL);
@@ -976,16 +996,16 @@ RESULT PowerOn(void)
 
 	/*** CNTR_PWDN = 0 ***/
 	wRegVal = CNTR_FRES;
-	_SetCNTR(wRegVal);
+	USB->CNTR=wRegVal;
 
 	/*** CNTR_FRES = 0 ***/
 	wInterrupt_Mask = 0;
-	_SetCNTR(wInterrupt_Mask);
+	USB->CNTR=wInterrupt_Mask;
 	/*** Clear pending interrupts ***/
-	_SetISTR(0);
+	USB->ISTR=0;
 	/*** Set interrupt mask ***/
 	wInterrupt_Mask = CNTR_RESETM | CNTR_SUSPM | CNTR_WKUPM;
-	_SetCNTR(wInterrupt_Mask);
+	USB->CNTR=wInterrupt_Mask;
 
 	return USB_SUCCESS;
 }
@@ -1000,13 +1020,13 @@ RESULT PowerOn(void)
 RESULT PowerOff()
 {
 	/* disable all interrupts and force USB reset */
-	_SetCNTR(CNTR_FRES);
+	USB->CNTR=CNTR_FRES;
 	/* clear interrupt status register */
-	_SetISTR(0);
+	USB->ISTR=0;
 	/* Disable the Pull-Up*/
 	USB_Cable_Config(DISABLE);
 	/* switch-off device */
-	_SetCNTR(CNTR_FRES + CNTR_PDWN);
+	USB->CNTR=CNTR_FRES + CNTR_PDWN;
 	/* sw variables reset */
 
 	return USB_SUCCESS;
@@ -1028,7 +1048,7 @@ void Suspend(void)
 	/* ... */
 
 	/*Store CNTR value */
-	wCNTR = _GetCNTR();  
+	wCNTR = USB->CNTR;  
 
 	/* This a sequence to apply a force RESET to handle a robustness case */
 
@@ -1037,21 +1057,21 @@ void Suspend(void)
 
 	/* unmask RESET flag */
 	wCNTR|=CNTR_RESETM;
-	_SetCNTR(wCNTR);
+	USB->CNTR=wCNTR;
 
 	/*apply FRES */
 	wCNTR|=CNTR_FRES;
-	_SetCNTR(wCNTR);
+	USB->CNTR=wCNTR;
 
 	/*clear FRES*/
 	wCNTR&=~CNTR_FRES;
-	_SetCNTR(wCNTR);
+	USB->CNTR=wCNTR;
 
 	/*poll for RESET flag in ISTR*/
-	while((_GetISTR()&ISTR_RESET) == 0);
+	while((USB->ISTR & ISTR_RESET) == 0);
 
 	/* clear RESET flag in ISTR */
-	_SetISTR((uint16_t)CLR_RESET);
+	USB->ISTR=((uint16_t)CLR_RESET);
 
 	/*restore Enpoints*/
 	for (i=0;i<8;i++)
@@ -1059,12 +1079,12 @@ void Suspend(void)
 
 	/* Now it is safe to enter macrocell in suspend mode */
 	wCNTR |= CNTR_FSUSP;
-	_SetCNTR(wCNTR);
+	USB->CNTR=wCNTR;
 
 	/* force low-power mode in the macrocell */
-	wCNTR = _GetCNTR();
+	wCNTR = USB->CNTR;
 	wCNTR |= CNTR_LPMODE;
-	_SetCNTR(wCNTR);
+	USB->CNTR=wCNTR;
 
 	Enter_LowPowerMode();
 }
@@ -1085,16 +1105,16 @@ void Resume_Init(void)
 	/* ...  */
 
 	/* CNTR_LPMODE = 0 */
-	wCNTR = _GetCNTR();
+	wCNTR = USB->CNTR;
 	wCNTR &= (~CNTR_LPMODE);
-	_SetCNTR(wCNTR);    
+	USB->CNTR=wCNTR;
 
 	/* restore full power */
 	/* ... on connected devices */
 	Leave_LowPowerMode();
 
 	/* reset FSUSP bit */
-	_SetCNTR(IMR_MSK);
+	USB->CNTR=IMR_MSK;
 
 	/* reverse suspend preparation */
 	/* ... */ 
@@ -1147,9 +1167,9 @@ void Resume(RESUME_STATE eResumeSetVal)
 				ResumeS.eState = RESUME_START;
 			break;
 		case RESUME_START:
-			wCNTR = _GetCNTR();
+			wCNTR = USB->CNTR;
 			wCNTR |= CNTR_RESUME;
-			_SetCNTR(wCNTR);
+			USB->CNTR=wCNTR;
 			ResumeS.eState = RESUME_ON;
 			ResumeS.bESOFcnt = 10;
 			break;
@@ -1157,9 +1177,9 @@ void Resume(RESUME_STATE eResumeSetVal)
 			ResumeS.bESOFcnt--;
 			if (ResumeS.bESOFcnt == 0)
 			{
-				wCNTR = _GetCNTR();
+				wCNTR = USB->CNTR;
 				wCNTR &= (~CNTR_RESUME);
-				_SetCNTR(wCNTR);
+				USB->CNTR=wCNTR;
 				ResumeS.eState = RESUME_OFF;
 				remotewakeupon = 0;
 			}
@@ -1171,3 +1191,11 @@ void Resume(RESUME_STATE eResumeSetVal)
 			break;
 	}
 }
+
+void usb_ini(void)
+{
+	MGPIOA->CT8=GPIO_OUT_PP; //USB线的使能引脚
+	EP_num=3; //总共多少个端点
+	usb_hal_ini(); //初始化硬件
+}
+
