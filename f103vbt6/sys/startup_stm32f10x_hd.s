@@ -32,7 +32,7 @@
 ;   <o> Stack Size (in Bytes) <0x0-0xFFFFFFFF:8>
 ; </h>
 
-;��ջ��С����,����ֲ���������,����Ӧ����Ӧ�Ĵ�.Ĭ����1024�ֽ�.
+;堆栈大小设置,如果局部变量过多,这里应该相应改大.默认是1024字节.
 Stack_Size      EQU     0x00000400
 
                 AREA    STACK, NOINIT, READWRITE, ALIGN=3
@@ -43,7 +43,7 @@ __initial_sp
 ;   <o>  Heap Size (in Bytes) <0x0-0xFFFFFFFF:8>
 ; </h>
 
-;δ�õ��������Դ����ڴ����(malloc,free��)������Heap_SzieΪ0
+;未用到编译器自带的内存管理(malloc,free等)，设置Heap_Szie为0
 Heap_Size       EQU     0x00001000
 
                 AREA    HEAP, NOINIT, READWRITE, ALIGN=3
@@ -149,8 +149,8 @@ __Vectors_Size  EQU  __Vectors_End - __Vectors
 Reset_Handler   PROC
                 EXPORT  Reset_Handler             [WEAK]
                 IMPORT  __main
-				;�Ĵ����汾���룬��Ϊû���õ�SystemInit����������ע�͵����´���Ϊ��ֹ������
-				;�⺯���汾���룬�����������ⲿ����ʵ��SystemInit���������Գ�ʼ��stm32ʱ�ӵȡ�
+				;寄存器版本代码，因为没有用到SystemInit函数，所以注释掉以下代码为防止报错！
+				;库函数版本代码，建议加上这里（外部必须实现SystemInit函数），以初始化stm32时钟等。
                 ;IMPORT  SystemInit			
                 ;LDR     R0, =SystemInit	
                 ;BLX     R0                  

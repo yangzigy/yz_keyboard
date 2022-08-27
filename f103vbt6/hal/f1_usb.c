@@ -3,9 +3,11 @@
 #include "usb_core.h"
 
 int EP_num=1; //总共多少个端点
-void SetEPType(u8 bEpNum, u16 wType)
+void SetEPType(u8 i, u16 wType) //设置端点类型
 {
-	_SetEPType(bEpNum, wType);
+	//先清零写0无效的位，再置位写1无效的位
+	//USB_EP(i)=(USB_EP(i) & EP_T_MASK) | wType;
+	USB_EP(i)=(USB_EP(i) & (~(EPREG_0_SET & (3<<9)))) | EPREG_1_SET | wType;
 }
 
 void SetEPTxStatus(u8 bEpNum, u16 wState)
@@ -161,8 +163,6 @@ void PMAToUserBufferCopy(uint8_t *pbUsrBuf, uint16_t wPMABufAddr, uint16_t wNByt
 	}
 }
 
-/*  The number of current endpoint, it will be used to specify an endpoint */
-u8	EPindex;
 /*  The number of current device, it is an index to the Device_Table */
 /* u8	Device_no; */
 /*  Points to the DEVICE_INFO structure of current device */
@@ -176,7 +176,6 @@ DEVICE_PROP *pProperty;
 /*  in this variable first and will be set to the EPRB or EPRA */
 /*  at the end of interrupt process */
 u16	SaveState ;
-u16  wInterrupt_Mask;
 DEVICE_INFO	Device_Info;
 USER_STANDARD_REQUESTS  *pUser_Standard_Requests;
 
@@ -194,7 +193,5 @@ void usb_hal_ini(void)
 	pInformation->ControlState = 2;
 	pProperty = &Device_Property;
 	pUser_Standard_Requests = &User_Standard_Requests;
-	/* Initialize devices one by one */
-	pProperty->Init();
 }
 

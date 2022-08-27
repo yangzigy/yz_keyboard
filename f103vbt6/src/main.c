@@ -1,13 +1,11 @@
-#include "main.h"
-#include "stm32f1_sys.h" 	
 #include "f1_uart.h"
 #include "cmd.h"
 #include "key.h"
+#include "usb_kb_m.h"
 
 int get_que_data(u8 *p,Queue *q);
 #define TASK_POOL_2K 2
 u32 led_div=512-1; //led分频系数
-extern  vu32 bDeviceState;
 
 void systime_initial(u32 frq)//输入为中断频率
 {
@@ -49,7 +47,7 @@ int main(void)
 			{
 				SYS_task &= ~TASK_POOL_2K;
 				key_poll();
-				if(bDeviceState==1) led_div=511; //加入USB连接指示
+				if(usb_stat==USB_ATTACHED) led_div=511; //加入USB连接指示
 				else led_div=4095;
 				if((SYS_time & led_div)==0) PDout(13)^=1; //LED分频后，让IO反转
 			}

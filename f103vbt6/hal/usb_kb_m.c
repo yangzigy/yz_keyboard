@@ -2,16 +2,11 @@
 #include "usb_core.h"
 #include "usb_kb_m.h"
 
-vu16 wIstr;  /* ISTR register last read value */
-vu8 bIntPackSOF = 0;  /* SOFs received between 2 consecutive packets */
-extern u8	EPindex;
-extern u16  wInterrupt_Mask;
-
 void EP1_OUT_Callback(void)
 {
-	SetEPRxValid(ENDP1);
+	SetEPRxValid(1);
 }
-void (*pEpInt_IN[7])(void) =
+void (*pEpInt_IN[7])(void) = //端点0没有
 {
 	NOP_Process,
 	NOP_Process,
@@ -22,7 +17,7 @@ void (*pEpInt_IN[7])(void) =
 	NOP_Process,
 };
 
-void (*pEpInt_OUT[7])(void) =
+void (*pEpInt_OUT[7])(void) = //端点0没有
 {
 	EP1_OUT_Callback,
 	NOP_Process,
@@ -48,120 +43,9 @@ typedef enum _RESUME_STATE
 	RESUME_ESOF
 } RESUME_STATE;
 
-typedef enum _DEVICE_STATE
-{
-	UNCONNECTED,
-	ATTACHED,
-	POWERED,
-	SUSPENDED,
-	ADDRESSED,
-	CONFIGURED
-} DEVICE_STATE;
-
 void Suspend(void);
 void Resume_Init(void);
 void Resume(RESUME_STATE eResumeSetVal);
-RESULT PowerOn(void);
-RESULT PowerOff(void);
-void CTR_LP(void)
-{
-	vu16 wEPVal = 0;
-	/* stay in loop while pending interrupts */
-	while (((wIstr = USB->ISTR) & ISTR_CTR) != 0)
-	{
-		/* extract highest priority endpoint number */
-		EPindex = (uint8_t)(wIstr & ISTR_EP_ID);
-		if (EPindex == 0)
-		{
-			/* Decode and service control endpoint interrupt */
-			/* calling related service routine */
-			/* (Setup0_Process, In0_Process, Out0_Process) */
-
-			/* save RX & TX status */
-			/* and set both to NAK */
-
-			SaveRState = _GetENDPOINT(ENDP0);
-			SaveTState = SaveRState & EPTX_STAT;
-			SaveRState &=  EPRX_STAT;	
-
-			_SetEPRxTxStatus(ENDP0,EP_RX_NAK,EP_TX_NAK);
-
-			/* DIR bit = origin of the interrupt */
-
-			if ((wIstr & ISTR_DIR) == 0)
-			{
-				/* DIR = 0 */
-
-				/* DIR = 0      => IN  int */
-				/* DIR = 0 implies that (EP_CTR_TX = 1) always  */
-
-				_ClearEP_CTR_TX(ENDP0);
-				In0_Process();
-
-				/* before terminate set Tx & Rx status */
-
-				_SetEPRxTxStatus(ENDP0,SaveRState,SaveTState);
-				return;
-			}
-			else
-			{
-				/* DIR = 1 */
-
-				/* DIR = 1 & CTR_RX       => SETUP or OUT int */
-				/* DIR = 1 & (CTR_TX | CTR_RX) => 2 int pending */
-
-				wEPVal = _GetENDPOINT(ENDP0);
-
-				if ((wEPVal &EP_SETUP) != 0)
-				{
-					_ClearEP_CTR_RX(ENDP0); /* SETUP bit kept frozen while CTR_RX = 1 */
-					Setup0_Process();
-					/* before terminate set Tx & Rx status */
-
-					_SetEPRxTxStatus(ENDP0,SaveRState,SaveTState);
-					return;
-				}
-
-				else if ((wEPVal & EP_CTR_RX) != 0)
-				{
-					_ClearEP_CTR_RX(ENDP0);
-					Out0_Process();
-					/* before terminate set Tx & Rx status */
-
-					_SetEPRxTxStatus(ENDP0,SaveRState,SaveTState);
-					return;
-				}
-			}
-		}/* if(EPindex == 0) */
-		else
-		{
-			/* Decode and service non control endpoints interrupt  */
-
-			/* process related endpoint register */
-			wEPVal = _GetENDPOINT(EPindex);
-			if ((wEPVal & EP_CTR_RX) != 0)
-			{
-				/* clear int flag */
-				_ClearEP_CTR_RX(EPindex);
-
-				/* call OUT service function */
-				(*pEpInt_OUT[EPindex-1])();
-
-			} /* if((wEPVal & EP_CTR_RX) */
-
-			if ((wEPVal & EP_CTR_TX) != 0)
-			{
-				/* clear int flag */
-				_ClearEP_CTR_TX(EPindex);
-
-				/* call IN service function */
-				(*pEpInt_IN[EPindex-1])();
-			} /* if((wEPVal & EP_CTR_TX) != 0) */
-
-		}/* if(EPindex == 0) else */
-
-	}/* while(...) */
-}
 //USB唤醒中断服务函数
 void USBWakeUp_IRQHandler(void) 
 {
@@ -170,114 +54,129 @@ void USBWakeUp_IRQHandler(void)
 //USB中断处理函数
 void USB_LP_CAN1_RX0_IRQHandler(void) 
 {
-	wIstr = USB->ISTR;
-	if (wIstr & ISTR_RESET & wInterrupt_Mask)
+	vu16 t;
+	t = USB->ISTR;
+	if (t & ISTR_RESET)
 	{
 		USB->ISTR=(u16)CLR_RESET;
 		Device_Property.Reset();
 	}
-
-	if (wIstr & ISTR_ERR & wInterrupt_Mask)
-	{
-		USB->ISTR=(u16)CLR_ERR;
-	}
-
-	if (wIstr & ISTR_WKUP & wInterrupt_Mask)
+	if (t & ISTR_ERR) USB->ISTR=(u16)CLR_ERR;
+	if (t & ISTR_WKUP)
 	{
 		USB->ISTR=(u16)CLR_WKUP;
 		Resume(RESUME_EXTERNAL);
 	}
-	if (wIstr & ISTR_SUSP & wInterrupt_Mask)
+	if (t & ISTR_SUSP) //挂起
 	{
-
-		/* check if SUSPEND is possible */
-		if (fSuspendEnabled)
-		{
-			Suspend();
-		}
-		else
-		{
-			/* if not possible then resume after xx ms */
-			Resume(RESUME_LATER);
-		}
+		Suspend();
 		/* clear of the ISTR bit must be done after setting of CNTR_FSUSP */
 		USB->ISTR=(u16)CLR_SUSP;
 	}
-
-	if (wIstr & ISTR_SOF & wInterrupt_Mask)
-	{
-		USB->ISTR=(u16)CLR_SOF;
-		bIntPackSOF++;
-	}
-
-	if (wIstr & ISTR_ESOF & wInterrupt_Mask)
+	if (t & ISTR_SOF) USB->ISTR=(u16)CLR_SOF;
+	if (t & ISTR_ESOF)
 	{
 		USB->ISTR=(u16)CLR_ESOF;
 		/* resume handling timing is made with ESOFs */
 		Resume(RESUME_ESOF); /* request without change of the machine state */
 	}
-
-	if (wIstr & ISTR_CTR & wInterrupt_Mask)
+	if (t & ISTR_CTR) //端点正确传输
 	{
-		/* servicing of the endpoint correct transfer interrupt */
-		/* clear of the CTR flag into the sub */
-		CTR_LP();
+		vu16 wEPVal = 0;
+		while (((t = USB->ISTR) & ISTR_CTR) != 0) //处理完所有中断
+		{
+			u8 EPindex = (uint8_t)(t & ISTR_EP_ID); //最高优先级端点
+			if (EPindex == 0)
+			{
+				/* Decode and service control endpoint interrupt */
+				/* calling related service routine */
+				/* (Setup0_Process, In0_Process, Out0_Process) */
+				/* save RX & TX status */
+				/* and set both to NAK */
+				SaveRState = USB_EP(0);
+				SaveTState = SaveRState & EPTX_STAT;
+				SaveRState &=  EPRX_STAT;	
+				_SetEPRxTxStatus(0,EP_RX_NAK,EP_TX_NAK);
+				/* DIR bit = origin of the interrupt */
+				if ((t & ISTR_DIR) == 0)
+				{
+					/* DIR = 0 */
+					/* DIR = 0      => IN  int */
+					/* DIR = 0 implies that (EP_CTR_TX = 1) always  */
+					_ClearEP_CTR_TX(0);
+					In0_Process();
+					/* before terminate set Tx & Rx status */
+					_SetEPRxTxStatus(0,SaveRState,SaveTState);
+					return;
+				}
+				else
+				{
+					/* DIR = 1 */
+					/* DIR = 1 & CTR_RX       => SETUP or OUT int */
+					/* DIR = 1 & (CTR_TX | CTR_RX) => 2 int pending */
+					wEPVal = USB_EP(0);
+					if ((wEPVal &EP_SETUP) != 0)
+					{
+						_ClearEP_CTR_RX(0); /* SETUP bit kept frozen while CTR_RX = 1 */
+						Setup0_Process();
+						/* before terminate set Tx & Rx status */
+						_SetEPRxTxStatus(0,SaveRState,SaveTState);
+						return;
+					}
+					else if ((wEPVal & EP_CTR_RX) != 0)
+					{
+						_ClearEP_CTR_RX(0);
+						Out0_Process();
+						/* before terminate set Tx & Rx status */
+						_SetEPRxTxStatus(0,SaveRState,SaveTState);
+						return;
+					}
+				}
+			}
+			else //非控制端点中断
+			{
+				wEPVal = USB_EP(EPindex);
+				if ((wEPVal & EP_CTR_RX) != 0)
+				{
+					/* clear int flag */
+					_ClearEP_CTR_RX(EPindex);
+					(*pEpInt_OUT[EPindex-1])(); //端点输出回调
+
+				}
+				if ((wEPVal & EP_CTR_TX) != 0)
+				{
+					/* clear int flag */
+					_ClearEP_CTR_TX(EPindex);
+					/* call IN service function */
+					(*pEpInt_IN[EPindex-1])();
+				} /* if((wEPVal & EP_CTR_TX) != 0) */
+			}
+		}
 	}
 } 
-
-/*******************************************************************************
- * Function Name  : Enter_LowPowerMode.
- * Description    : Power-off system clocks and power while entering suspend mode.
- * Input          : None.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
 void Enter_LowPowerMode(void)
 {
-	/* Set the device state to suspend */
-	bDeviceState = SUSPENDED;	  
-	/* Request to enter STOP mode with regulator in low power mode */
-	//PWR_EnterSTOPMode(PWR_Regulator_LowPower, PWR_STOPEntry_WFI);
+	usb_stat = USB_SUSPENDED;	  
+	//进入低功耗模式
 }
-
-/*******************************************************************************
- * Function Name  : Leave_LowPowerMode.
- * Description    : Restores system clocks and power while exiting suspend mode.
- * Input          : None.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
 void Leave_LowPowerMode(void)
 {
 	DEVICE_INFO *pInfo = &Device_Info;
-
 	/* Set the device state to the correct state */
 	if (pInfo->Current_Configuration != 0)
 	{
-		/* Device configured */
-		bDeviceState = CONFIGURED;
+		usb_stat = USB_CONFIGURED; //配置完成
 	}
 	else
 	{
-		bDeviceState = ATTACHED;
+		usb_stat = USB_ATTACHED;
 	}
 }
 
-//USB接口配置(配置1.5K上拉电阻,战舰V3不需要配置,恒上拉)
-//NewState:DISABLE,不上拉
-//         ENABLE,上拉
-void USB_Cable_Config(FunctionalState NewState)
+void USB_Cable_Config(int e) //0不上拉，1上拉
 { 
-	if (NewState!=DISABLE)
-	{
-		PAout(8)=1;
-		//printf("usb pull up enable\r\n"); 
-	}
-	else
-	{
-		PAout(8)=0;
-		//printf("usb pull up disable\r\n"); 
-	}
+	if (e) PAout(8)=1;
+	else PAout(8)=0;
 }
 u32 keyboard_send_pre_0=0;
 u32 keyboard_send_pre_1=0; //上次发送值
@@ -289,8 +188,8 @@ void keyboard_send(u8 *buf)
 	}
 	keyboard_send_pre_0=((u32*)buf)[0];
 	keyboard_send_pre_1=((u32*)buf)[1];
-	UserToPMABufferCopy(buf, _GetEPTxAddr(ENDP1), 8);
-	SetEPTxValid(ENDP1);
+	UserToPMABufferCopy(buf, _GetEPTxAddr(1), 8);
+	SetEPTxValid(1);
 }
 u32 mouse_send_pre=0; //上次发送值
 void mouse_send(u8 *buf)
@@ -300,42 +199,8 @@ void mouse_send(u8 *buf)
 		return ;
 	}
 	mouse_send_pre=((u32*)(buf+1))[0];
-	UserToPMABufferCopy(buf, _GetEPTxAddr(ENDP2), 5);
-	SetEPTxValid(ENDP2);
-}
-
-/*******************************************************************************
- * Function Name  : Get_SerialNum.
- * Description    : Create the serial number string descriptor.
- * Input          : None.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void Get_SerialNum(void)
-{
-	u32 Device_Serial0, Device_Serial1, Device_Serial2;
-
-	Device_Serial0 = *(u32*)(0x1FFFF7E8);
-	Device_Serial1 = *(u32*)(0x1FFFF7EC);
-	Device_Serial2 = *(u32*)(0x1FFFF7F0);
-
-	if (Device_Serial0 != 0)
-	{
-		Joystick_StringSerial[2] = (u8)(Device_Serial0 & 0x000000FF);
-		Joystick_StringSerial[4] = (u8)((Device_Serial0 & 0x0000FF00) >> 8);
-		Joystick_StringSerial[6] = (u8)((Device_Serial0 & 0x00FF0000) >> 16);
-		Joystick_StringSerial[8] = (u8)((Device_Serial0 & 0xFF000000) >> 24);
-
-		Joystick_StringSerial[10] = (u8)(Device_Serial1 & 0x000000FF);
-		Joystick_StringSerial[12] = (u8)((Device_Serial1 & 0x0000FF00) >> 8);
-		Joystick_StringSerial[14] = (u8)((Device_Serial1 & 0x00FF0000) >> 16);
-		Joystick_StringSerial[16] = (u8)((Device_Serial1 & 0xFF000000) >> 24);
-
-		Joystick_StringSerial[18] = (u8)(Device_Serial2 & 0x000000FF);
-		Joystick_StringSerial[20] = (u8)((Device_Serial2 & 0x0000FF00) >> 8);
-		Joystick_StringSerial[22] = (u8)((Device_Serial2 & 0x00FF0000) >> 16);
-		Joystick_StringSerial[24] = (u8)((Device_Serial2 & 0xFF000000) >> 24);
-	}
+	UserToPMABufferCopy(buf, _GetEPTxAddr(2), 5);
+	SetEPTxValid(2);
 }
 
 //设备描述符，配置描述符，字符串描述符，接口描述符，端点描述符
@@ -568,11 +433,9 @@ u8 Joystick_StringSerial[JOYSTICK_SIZ_STRING_SERIAL] =
 
 u32 ProtocolValue;
 extern DEVICE_INFO *pInformation;
-extern u16  wInterrupt_Mask;
 
 DEVICE_PROP Device_Property =
 {
-	Joystick_init,
 	Joystick_Reset,
 	Joystick_Status_In,
 	Joystick_Status_Out,
@@ -643,34 +506,38 @@ ONE_DESCRIPTOR String_Descriptor[4] =
 	{(u8*)Joystick_StringSerial, JOYSTICK_SIZ_STRING_SERIAL}
 };
 
-/* Extern variables ----------------------------------------------------------*/
-/* Private function prototypes -----------------------------------------------*/
-/* Extern function prototypes ------------------------------------------------*/
-/* Private functions ---------------------------------------------------------*/
-
-/*******************************************************************************
- * Function Name  : Joystick_init.
- * Description    : Joystick Mouse init routine.
- * Input          : None.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
 void Joystick_init(void)
 {
+	u32 t0, t1, t2;
+	t0 = *(u32*)(0x1FFFF7E8);
+	t1 = *(u32*)(0x1FFFF7EC);
+	t2 = *(u32*)(0x1FFFF7F0);
+	Joystick_StringSerial[2] = (u8)(t0 & 0x000000FF);
+	Joystick_StringSerial[4] = (u8)((t0 & 0x0000FF00) >> 8);
+	Joystick_StringSerial[6] = (u8)((t0 & 0x00FF0000) >> 16);
+	Joystick_StringSerial[8] = (u8)((t0 & 0xFF000000) >> 24);
 
-	/* Update the serial number string descriptor with the data from the unique
-	   ID*/
-	Get_SerialNum();
+	Joystick_StringSerial[10] = (u8)(t1 & 0x000000FF);
+	Joystick_StringSerial[12] = (u8)((t1 & 0x0000FF00) >> 8);
+	Joystick_StringSerial[14] = (u8)((t1 & 0x00FF0000) >> 16);
+	Joystick_StringSerial[16] = (u8)((t1 & 0xFF000000) >> 24);
+
+	Joystick_StringSerial[18] = (u8)(t2 & 0x000000FF);
+	Joystick_StringSerial[20] = (u8)((t2 & 0x0000FF00) >> 8);
+	Joystick_StringSerial[22] = (u8)((t2 & 0x00FF0000) >> 16);
+	Joystick_StringSerial[24] = (u8)((t2 & 0xFF000000) >> 24);
 
 	pInformation->Current_Configuration = 0;
 	/* Connect the device */
-	PowerOn();
+	USB_Cable_Config(1);
+	USB->CNTR=1; //重启
+	USB->CNTR=0;
+	USB->ISTR=0; //清除中断
+	USB->CNTR=CNTR_RESETM | CNTR_SUSPM | CNTR_WKUPM; //设置中断
 	/* USB interrupts initialization */
 	USB->ISTR=0;               /* clear pending interrupts */
-	wInterrupt_Mask = IMR_MSK;
-	USB->CNTR=wInterrupt_Mask; /* set interrupts mask */
-
-	bDeviceState = UNCONNECTED;
+	USB->CNTR= CNTR_CTRM  | CNTR_WKUPM | CNTR_SUSPM | CNTR_ERRM  | CNTR_SOFM | CNTR_ESOFM | CNTR_RESETM; /* set interrupts mask */
+	usb_stat = USB_UNCONNECTED;
 }
 
 /*******************************************************************************
@@ -691,33 +558,33 @@ void Joystick_Reset(void)
 
 	USB->BTABLE =0;
 
-	/* Initialize Endpoint 0 */
-	SetEPType(ENDP0, EP_CONTROL);
-	SetEPTxStatus(ENDP0, EP_TX_STALL);
-	SetEPRxAddr(ENDP0, ENDP0_RXADDR);
-	SetEPTxAddr(ENDP0, ENDP0_TXADDR);
-	Clear_Status_Out(ENDP0);
-	SetEPRxCount(ENDP0, Device_Property.MaxPacketSize);
-	SetEPRxValid(ENDP0);
+	//设置端点0
+	SetEPType(0, EP_CONTROL); //设置端点0为控制端点
+	SetEPTxStatus(0, EP_TX_STALL);
+	SetEPRxAddr(0, ENDP0_RXADDR);
+	SetEPTxAddr(0, ENDP0_TXADDR);
+	Clear_Status_Out(0);
+	SetEPRxCount(0, Device_Property.MaxPacketSize);
+	SetEPRxValid(0);
 
-	/* Initialize Endpoint In 1 */
-	SetEPType(ENDP1, EP_INTERRUPT); //初始化为中断端点类型
-	SetEPTxAddr(ENDP1, ENDP1_TXADDR); //设置发送数据的地址
-	SetEPTxCount(ENDP1, 8); //设置发送的长度
-	SetEPTxStatus(ENDP1, EP_TX_NAK); //设置端点处于忙状态
+	//设置端点1的 In 方向
+	SetEPType(1, EP_INTERRUPT); //设置端点1为中断端点类型
+	SetEPTxAddr(1, ENDP1_TXADDR); //设置发送数据的地址
+	SetEPTxCount(1, 8); //设置发送的长度
+	SetEPTxStatus(1, EP_TX_NAK); //设置端点处于忙状态
 
 	/* Initialize Endpoint Out 1 */
-	SetEPRxAddr(ENDP1, ENDP1_RXADDR); //设置接收数据的地址
-	SetEPRxCount(ENDP1, 2);  //设置接收长度
-	SetEPRxStatus(ENDP1, EP_RX_VALID); //设置端点有效，可以接收数据
+	SetEPRxAddr(1, ENDP1_RXADDR); //设置接收数据的地址
+	SetEPRxCount(1, 2);  //设置接收长度
+	SetEPRxStatus(1, EP_RX_VALID); //设置端点有效，可以接收数据
 
 	/* Initialize Endpoint In 2 */
-	SetEPType(ENDP2, EP_INTERRUPT); //初始化为中断端点类型
-	SetEPTxAddr(ENDP2, ENDP2_TXADDR); //设置发送数据的地址
-	SetEPTxCount(ENDP2, 5); //设置发送的长度
-	SetEPTxStatus(ENDP2, EP_TX_NAK); //设置端点处于忙状态
+	SetEPType(2, EP_INTERRUPT); //初始化为中断端点类型
+	SetEPTxAddr(2, ENDP2_TXADDR); //设置发送数据的地址
+	SetEPTxCount(2, 5); //设置发送的长度
+	SetEPTxStatus(2, EP_TX_NAK); //设置端点处于忙状态
 
-	bDeviceState = ATTACHED;
+	usb_stat = USB_ATTACHED;
 
 	/* Set this device to response on default address */
 	SetDeviceAddress(0);
@@ -968,10 +835,8 @@ u8 *Joystick_GetProtocolValue(u16 Length)
 	}
 }
 
-vu32 bDeviceState = UNCONNECTED; /* USB device status */
 vu32 fSuspendEnabled = 1;  /* true when suspend is possible */
 vu32 EP[8];
-extern u16  wInterrupt_Mask;
 struct
 {
 	__IO RESUME_STATE eState;
@@ -979,59 +844,6 @@ struct
 } ResumeS;
 
 vu32 remotewakeupon=0;
-
-/*******************************************************************************
- * Function Name  : PowerOn
- * Description    :
- * Input          : None.
- * Output         : None.
- * Return         : USB_SUCCESS.
- *******************************************************************************/
-RESULT PowerOn(void)
-{
-	u16 wRegVal;
-
-	/*** cable plugged-in ? ***/
-	USB_Cable_Config(ENABLE);
-
-	/*** CNTR_PWDN = 0 ***/
-	wRegVal = CNTR_FRES;
-	USB->CNTR=wRegVal;
-
-	/*** CNTR_FRES = 0 ***/
-	wInterrupt_Mask = 0;
-	USB->CNTR=wInterrupt_Mask;
-	/*** Clear pending interrupts ***/
-	USB->ISTR=0;
-	/*** Set interrupt mask ***/
-	wInterrupt_Mask = CNTR_RESETM | CNTR_SUSPM | CNTR_WKUPM;
-	USB->CNTR=wInterrupt_Mask;
-
-	return USB_SUCCESS;
-}
-
-/*******************************************************************************
- * Function Name  : PowerOff
- * Description    : handles switch-off conditions
- * Input          : None.
- * Output         : None.
- * Return         : USB_SUCCESS.
- *******************************************************************************/
-RESULT PowerOff()
-{
-	/* disable all interrupts and force USB reset */
-	USB->CNTR=CNTR_FRES;
-	/* clear interrupt status register */
-	USB->ISTR=0;
-	/* Disable the Pull-Up*/
-	USB_Cable_Config(DISABLE);
-	/* switch-off device */
-	USB->CNTR=CNTR_FRES + CNTR_PDWN;
-	/* sw variables reset */
-
-	return USB_SUCCESS;
-}
-
 /*******************************************************************************
  * Function Name  : Suspend
  * Description    : sets suspend mode operating conditions
@@ -1053,7 +865,7 @@ void Suspend(void)
 	/* This a sequence to apply a force RESET to handle a robustness case */
 
 	/*Store endpoints registers status */
-	for (i=0;i<8;i++) EP[i] = _GetENDPOINT(i);
+	for (i=0;i<8;i++) EP[i] = USB_EP(i);
 
 	/* unmask RESET flag */
 	wCNTR|=CNTR_RESETM;
@@ -1099,26 +911,18 @@ void Suspend(void)
 void Resume_Init(void)
 {
 	u16 wCNTR;
-
 	/* ------------------ ONLY WITH BUS-POWERED DEVICES ---------------------- */
 	/* restart the clocks */
-	/* ...  */
-
 	/* CNTR_LPMODE = 0 */
 	wCNTR = USB->CNTR;
 	wCNTR &= (~CNTR_LPMODE);
 	USB->CNTR=wCNTR;
-
 	/* restore full power */
 	/* ... on connected devices */
 	Leave_LowPowerMode();
-
 	/* reset FSUSP bit */
-	USB->CNTR=IMR_MSK;
-
+	USB->CNTR=CNTR_CTRM  | CNTR_WKUPM | CNTR_SUSPM | CNTR_ERRM  | CNTR_SOFM | CNTR_ESOFM | CNTR_RESETM;
 	/* reverse suspend preparation */
-	/* ... */ 
-
 }
 
 /*******************************************************************************
@@ -1135,60 +939,60 @@ void Resume_Init(void)
  *******************************************************************************/
 void Resume(RESUME_STATE eResumeSetVal)
 {
-	uint16_t wCNTR;
+	u16 wCNTR;
 
 	if (eResumeSetVal != RESUME_ESOF)
 		ResumeS.eState = eResumeSetVal;
 	switch (ResumeS.eState)
 	{
-		case RESUME_EXTERNAL:
-			if (remotewakeupon ==0)
-			{
-				Resume_Init();
-				ResumeS.eState = RESUME_OFF;
-			}
-			else /* RESUME detected during the RemoteWAkeup signalling => keep RemoteWakeup handling*/
-			{
-				ResumeS.eState = RESUME_ON;
-			}
-			break;
-		case RESUME_INTERNAL:
+	case RESUME_EXTERNAL:
+		if (remotewakeupon ==0)
+		{
 			Resume_Init();
-			ResumeS.eState = RESUME_START;
-			remotewakeupon = 1;
-			break;
-		case RESUME_LATER:
-			ResumeS.bESOFcnt = 2;
-			ResumeS.eState = RESUME_WAIT;
-			break;
-		case RESUME_WAIT:
-			ResumeS.bESOFcnt--;
-			if (ResumeS.bESOFcnt == 0)
-				ResumeS.eState = RESUME_START;
-			break;
-		case RESUME_START:
-			wCNTR = USB->CNTR;
-			wCNTR |= CNTR_RESUME;
-			USB->CNTR=wCNTR;
-			ResumeS.eState = RESUME_ON;
-			ResumeS.bESOFcnt = 10;
-			break;
-		case RESUME_ON:    
-			ResumeS.bESOFcnt--;
-			if (ResumeS.bESOFcnt == 0)
-			{
-				wCNTR = USB->CNTR;
-				wCNTR &= (~CNTR_RESUME);
-				USB->CNTR=wCNTR;
-				ResumeS.eState = RESUME_OFF;
-				remotewakeupon = 0;
-			}
-			break;
-		case RESUME_OFF:
-		case RESUME_ESOF:
-		default:
 			ResumeS.eState = RESUME_OFF;
-			break;
+		}
+		else /* RESUME detected during the RemoteWAkeup signalling => keep RemoteWakeup handling*/
+		{
+			ResumeS.eState = RESUME_ON;
+		}
+		break;
+	case RESUME_INTERNAL:
+		Resume_Init();
+		ResumeS.eState = RESUME_START;
+		remotewakeupon = 1;
+		break;
+	case RESUME_LATER:
+		ResumeS.bESOFcnt = 2;
+		ResumeS.eState = RESUME_WAIT;
+		break;
+	case RESUME_WAIT:
+		ResumeS.bESOFcnt--;
+		if (ResumeS.bESOFcnt == 0)
+			ResumeS.eState = RESUME_START;
+		break;
+	case RESUME_START:
+		wCNTR = USB->CNTR;
+		wCNTR |= CNTR_RESUME;
+		USB->CNTR=wCNTR;
+		ResumeS.eState = RESUME_ON;
+		ResumeS.bESOFcnt = 10;
+		break;
+	case RESUME_ON:    
+		ResumeS.bESOFcnt--;
+		if (ResumeS.bESOFcnt == 0)
+		{
+			wCNTR = USB->CNTR;
+			wCNTR &= (~CNTR_RESUME);
+			USB->CNTR=wCNTR;
+			ResumeS.eState = RESUME_OFF;
+			remotewakeupon = 0;
+		}
+		break;
+	case RESUME_OFF:
+	case RESUME_ESOF:
+	default:
+		ResumeS.eState = RESUME_OFF;
+		break;
 	}
 }
 
@@ -1197,5 +1001,7 @@ void usb_ini(void)
 	MGPIOA->CT8=GPIO_OUT_PP; //USB线的使能引脚
 	EP_num=3; //总共多少个端点
 	usb_hal_ini(); //初始化硬件
+	//初始化设备
+	Joystick_init();
 }
 

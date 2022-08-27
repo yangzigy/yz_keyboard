@@ -40,40 +40,13 @@ typedef struct
 #define USB                 ((USB_TypeDef *) USB_BASE)
 #define USB_EP(i)           (((vu16 *)USB_BASE)[(i)*2]) //通过索引访问端点寄存器
 
-typedef enum _EP_DBUF_DIR
+typedef enum 
 {
-	/* double buffered endpoint direction */
 	EP_DBUF_ERR,
 	EP_DBUF_OUT,
 	EP_DBUF_IN
-}EP_DBUF_DIR;
+} EP_DBUF_DIR; //双缓存端点方向
 
-/* endpoint buffer number */
-enum EP_BUF_NUM
-{
-	EP_NOBUF,
-	EP_BUF0,
-	EP_BUF1
-};
-
-/******************************************************************************/
-/*                         Endpoint registers                                 */
-/******************************************************************************/
-#define EP0REG  ((__IO unsigned *)(RegBase)) /* endpoint 0 register address */
-
-/* endpoints enumeration */
-#define ENDP0       ((uint8_t)0)
-#define ENDP1       ((uint8_t)1)
-#define ENDP2       ((uint8_t)2)
-#define ENDP3       ((uint8_t)3)
-#define ENDP4       ((uint8_t)4)
-#define ENDP5       ((uint8_t)5)
-#define ENDP6       ((uint8_t)6)
-#define ENDP7       ((uint8_t)7)
-
-/******************************************************************************/
-/*                       ISTR interrupt events                                */
-/******************************************************************************/
 #define ISTR_CTR    (0x8000) /* Correct TRansfer (clear-only bit) */
 #define ISTR_DOVR   (0x4000) /* DMA OVeR/underrun (clear-only bit) */
 #define ISTR_ERR    (0x2000) /* ERRor (clear-only bit) */
@@ -116,19 +89,6 @@ enum EP_BUF_NUM
 #define CNTR_FRES   (0x0001) /* Force USB RESet */
 
 /******************************************************************************/
-/*                FNR Frame Number Register bit definitions                   */
-/******************************************************************************/
-#define FNR_RXDP (0x8000) /* status of D+ data line */
-#define FNR_RXDM (0x4000) /* status of D- data line */
-#define FNR_LCK  (0x2000) /* LoCKed */
-#define FNR_LSOF (0x1800) /* Lost SOF */
-#define FNR_FN  (0x07FF) /* Frame Number */
-/******************************************************************************/
-/*               DADDR Device ADDRess bit definitions                         */
-/******************************************************************************/
-#define DADDR_EF (0x80)
-#define DADDR_ADD (0x7F)
-/******************************************************************************/
 /*                            Endpoint register                               */
 /******************************************************************************/
 /* bit positions */
@@ -143,8 +103,12 @@ enum EP_BUF_NUM
 #define EPTX_STAT      (0x0030) /* EndPoint TX STATus bit field */
 #define EPADDR_FIELD   (0x000F) /* EndPoint ADDRess FIELD */
 
-//EndPoint REGister MASK (no toggle fields)
-#define EPREG_MASK     (EP_CTR_RX|EP_SETUP|EP_T_FIELD|EP_KIND|EP_CTR_TX|EPADDR_FIELD)
+//端点寄存器中，写0无效的位
+#define EPREG_0_SET    ((1<<14) | (3<<12) | (1<<6) | (3<<4))
+//端点寄存器中，写1无效的位
+#define EPREG_1_SET    ((1<<15) | (1<<7))
+
+#define EPREG_MASK     ((1<<15)|(1<<11)|(3<<9)|EP_KIND|EP_CTR_TX|EPADDR_FIELD)
 
 /* EP_TYPE[1:0] EndPoint TYPE */
 #define EP_TYPE_MASK   (0x0600) /* EndPoint TYPE Mask */
@@ -153,7 +117,6 @@ enum EP_BUF_NUM
 #define EP_ISOCHRONOUS (0x0400) /* EndPoint ISOCHRONOUS */
 #define EP_INTERRUPT   (0x0600) /* EndPoint INTERRUPT */
 #define EP_T_MASK      (~EP_T_FIELD & EPREG_MASK)
-
 
 /* EP_KIND EndPoint KIND */
 #define EPKIND_MASK    (~EP_KIND & EPREG_MASK)
@@ -175,34 +138,9 @@ enum EP_BUF_NUM
 #define EPRX_DTOG1     (0x1000) /* EndPoint RX Data TOGgle bit1 */
 #define EPRX_DTOG2     (0x2000) /* EndPoint RX Data TOGgle bit1 */
 #define EPRX_DTOGMASK  (EPRX_STAT|EPREG_MASK)
-/* Exported macro ------------------------------------------------------------*/
 
 /* SetENDPOINT */
-#define _SetENDPOINT(bEpNum,wRegValue)  (*(EP0REG + bEpNum)= \
-		(uint16_t)wRegValue)
-
-/* GetENDPOINT */
-#define _GetENDPOINT(bEpNum)        ((uint16_t)(*(EP0REG + bEpNum)))
-
-/*******************************************************************************
- * Macro Name     : SetEPType
- * Description    : sets the type in the endpoint register(bits EP_TYPE[1:0])
- * Input          : bEpNum: Endpoint Number. 
- *                  wType											 
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-#define _SetEPType(bEpNum,wType) (_SetENDPOINT(bEpNum,\
-			((_GetENDPOINT(bEpNum) & EP_T_MASK) | wType )))
-
-/*******************************************************************************
- * Macro Name     : GetEPType
- * Description    : gets the type in the endpoint register(bits EP_TYPE[1:0]) 
- * Input          : bEpNum: Endpoint Number. 
- * Output         : None.
- * Return         : Endpoint Type
- *******************************************************************************/
-#define _GetEPType(bEpNum) (_GetENDPOINT(bEpNum) & EP_T_FIELD)
+#define _SetENDPOINT(i,wRegValue)  (USB_EP(i)= (uint16_t)wRegValue)
 
 /*******************************************************************************
  * Macro Name     : SetEPTxStatus
@@ -214,7 +152,7 @@ enum EP_BUF_NUM
  *******************************************************************************/
 #define _SetEPTxStatus(bEpNum,wState) {\
 	register uint16_t _wRegVal;       \
-	_wRegVal = _GetENDPOINT(bEpNum) & EPTX_DTOGMASK;\
+	_wRegVal = USB_EP(bEpNum) & EPTX_DTOGMASK;\
 	/* toggle first bit ? */     \
 	if((EPTX_DTOG1 & wState)!= 0)      \
 	_wRegVal ^= EPTX_DTOG1;        \
@@ -235,7 +173,7 @@ enum EP_BUF_NUM
 #define _SetEPRxStatus(bEpNum,wState) {\
 	register uint16_t _wRegVal;   \
 	\
-	_wRegVal = _GetENDPOINT(bEpNum) & EPRX_DTOGMASK;\
+	_wRegVal = USB_EP(bEpNum) & EPRX_DTOGMASK;\
 	/* toggle first bit ? */  \
 	if((EPRX_DTOG1 & wState)!= 0) \
 	_wRegVal ^= EPRX_DTOG1;  \
@@ -257,7 +195,7 @@ enum EP_BUF_NUM
 #define _SetEPRxTxStatus(bEpNum,wStaterx,wStatetx) {\
 	register uint32_t _wRegVal;   \
 	\
-	_wRegVal = _GetENDPOINT(bEpNum) & (EPRX_DTOGMASK |EPTX_STAT) ;\
+	_wRegVal = USB_EP(bEpNum) & (EPRX_DTOGMASK |EPTX_STAT) ;\
 	/* toggle first bit ? */  \
 	if((EPRX_DTOG1 & wStaterx)!= 0) \
 	_wRegVal ^= EPRX_DTOG1;  \
@@ -280,20 +218,9 @@ enum EP_BUF_NUM
  * Output         : None.
  * Return         : status .
  *******************************************************************************/
-#define _GetEPTxStatus(bEpNum) ((uint16_t)_GetENDPOINT(bEpNum) & EPTX_STAT)
+#define _GetEPTxStatus(bEpNum) ((uint16_t)USB_EP(bEpNum) & EPTX_STAT)
 
-#define _GetEPRxStatus(bEpNum) ((uint16_t)_GetENDPOINT(bEpNum) & EPRX_STAT)
-
-/*******************************************************************************
- * Macro Name     : SetEPTxValid / SetEPRxValid 
- * Description    : sets directly the VALID tx/rx-status into the enpoint register
- * Input          : bEpNum: Endpoint Number. 
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-#define _SetEPTxValid(bEpNum)     (_SetEPTxStatus(bEpNum, EP_TX_VALID))
-
-#define _SetEPRxValid(bEpNum)     (_SetEPRxStatus(bEpNum, EP_RX_VALID))
+#define _GetEPRxStatus(bEpNum) ((uint16_t)USB_EP(bEpNum) & EPRX_STAT)
 
 /*******************************************************************************
  * Macro Name     : GetTxStallStatus / GetRxStallStatus.
@@ -315,29 +242,9 @@ enum EP_BUF_NUM
  * Return         : None.
  *******************************************************************************/
 #define _SetEP_KIND(bEpNum)    (_SetENDPOINT(bEpNum, \
-			(EP_CTR_RX|EP_CTR_TX|((_GetENDPOINT(bEpNum) | EP_KIND) & EPREG_MASK))))
+			(EP_CTR_RX|EP_CTR_TX|((USB_EP(bEpNum) | EP_KIND) & EPREG_MASK))))
 #define _ClearEP_KIND(bEpNum)  (_SetENDPOINT(bEpNum, \
-			(EP_CTR_RX|EP_CTR_TX|(_GetENDPOINT(bEpNum) & EPKIND_MASK))))
-
-/*******************************************************************************
- * Macro Name     : Set_Status_Out / Clear_Status_Out.
- * Description    : Sets/clears directly STATUS_OUT bit in the endpoint register.
- * Input          : bEpNum: Endpoint Number. 
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-#define _Set_Status_Out(bEpNum)    _SetEP_KIND(bEpNum)
-#define _Clear_Status_Out(bEpNum)  _ClearEP_KIND(bEpNum)
-
-/*******************************************************************************
- * Macro Name     : SetEPDoubleBuff / ClearEPDoubleBuff.
- * Description    : Sets/clears directly EP_KIND bit in the endpoint register.
- * Input          : bEpNum: Endpoint Number. 
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-#define _SetEPDoubleBuff(bEpNum)   _SetEP_KIND(bEpNum)
-#define _ClearEPDoubleBuff(bEpNum) _ClearEP_KIND(bEpNum)
+			(EP_CTR_RX|EP_CTR_TX|(USB_EP(bEpNum) & EPKIND_MASK))))
 
 /*******************************************************************************
  * Macro Name     : ClearEP_CTR_RX / ClearEP_CTR_TX.
@@ -347,9 +254,9 @@ enum EP_BUF_NUM
  * Return         : None.
  *******************************************************************************/
 #define _ClearEP_CTR_RX(bEpNum)   (_SetENDPOINT(bEpNum,\
-			_GetENDPOINT(bEpNum) & 0x7FFF & EPREG_MASK))
+			USB_EP(bEpNum) & 0x7FFF & EPREG_MASK))
 #define _ClearEP_CTR_TX(bEpNum)   (_SetENDPOINT(bEpNum,\
-			_GetENDPOINT(bEpNum) & 0xFF7F & EPREG_MASK))
+			USB_EP(bEpNum) & 0xFF7F & EPREG_MASK))
 
 /*******************************************************************************
  * Macro Name     : ToggleDTOG_RX / ToggleDTOG_TX .
@@ -359,9 +266,9 @@ enum EP_BUF_NUM
  * Return         : None.
  *******************************************************************************/
 #define _ToggleDTOG_RX(bEpNum)    (_SetENDPOINT(bEpNum, \
-			EP_CTR_RX|EP_CTR_TX|EP_DTOG_RX | (_GetENDPOINT(bEpNum) & EPREG_MASK)))
+			EP_CTR_RX|EP_CTR_TX|EP_DTOG_RX | (USB_EP(bEpNum) & EPREG_MASK)))
 #define _ToggleDTOG_TX(bEpNum)    (_SetENDPOINT(bEpNum, \
-			EP_CTR_RX|EP_CTR_TX|EP_DTOG_TX | (_GetENDPOINT(bEpNum) & EPREG_MASK)))
+			EP_CTR_RX|EP_CTR_TX|EP_DTOG_TX | (USB_EP(bEpNum) & EPREG_MASK)))
 
 /*******************************************************************************
  * Macro Name     : ClearDTOG_RX / ClearDTOG_TX.
@@ -370,29 +277,10 @@ enum EP_BUF_NUM
  * Output         : None.
  * Return         : None.
  *******************************************************************************/
-#define _ClearDTOG_RX(bEpNum)  if((_GetENDPOINT(bEpNum) & EP_DTOG_RX) != 0)\
+#define _ClearDTOG_RX(bEpNum)  if((USB_EP(bEpNum) & EP_DTOG_RX) != 0)\
 																		 _ToggleDTOG_RX(bEpNum)
-#define _ClearDTOG_TX(bEpNum)  if((_GetENDPOINT(bEpNum) & EP_DTOG_TX) != 0)\
+#define _ClearDTOG_TX(bEpNum)  if((USB_EP(bEpNum) & EP_DTOG_TX) != 0)\
 																		 _ToggleDTOG_TX(bEpNum)
-/*******************************************************************************
- * Macro Name     : SetEPAddress.
- * Description    : Sets address in an endpoint register.
- * Input          : bEpNum: Endpoint Number.
- *                  bAddr: Address. 
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-//#define _SetEPAddress(bEpNum,bAddr) _SetENDPOINT(bEpNum,\
-		//EP_CTR_RX|EP_CTR_TX|(_GetENDPOINT(bEpNum) & EPREG_MASK) | bAddr)
-
-/*******************************************************************************
- * Macro Name     : GetEPAddress.
- * Description    : Gets address in an endpoint register.
- * Input          : bEpNum: Endpoint Number.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-#define _GetEPAddress(bEpNum) ((uint8_t)(_GetENDPOINT(bEpNum) & EPADDR_FIELD))
 
 #define _pEPTxAddr(bEpNum) ((uint32_t *)((USB->BTABLE + bEpNum*8  )*2 + PMAAddr))
 #define _pEPTxCount(bEpNum) ((uint32_t *)((USB->BTABLE + bEpNum*8+2)*2 + PMAAddr))
@@ -545,18 +433,6 @@ enum EP_BUF_NUM
 	_SetEPDblBuf1Count(bEpNum, bDir, wCount); \
 } /* _SetEPDblBuffCount  */
 
-/*******************************************************************************
- * Macro Name     : GetEPDblBuf0Count / GetEPDblBuf1Count.
- * Description    : Gets buffer 0/1 rx/tx counter for double buffering.
- * Input          : bEpNum: endpoint number.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-#define _GetEPDblBuf0Count(bEpNum) (_GetEPTxCount(bEpNum))
-#define _GetEPDblBuf1Count(bEpNum) (_GetEPRxCount(bEpNum))
-
-
-/* External variables --------------------------------------------------------*/
 extern vu16 wIstr;  /* ISTR register last read value */
 extern int EP_num;
 void usb_hal_ini(void);

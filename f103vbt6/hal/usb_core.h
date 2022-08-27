@@ -3,6 +3,18 @@
 
 #include "f1_usb.h"
 
+typedef enum
+{
+	USB_UNCONNECTED, //未连接
+	USB_ATTACHED, //连接
+	USB_POWERED, //
+	USB_SUSPENDED,
+	USB_ADDRESSED,
+	USB_CONFIGURED
+} DEVICE_STATE; //设备状态
+
+extern DEVICE_STATE usb_stat; //usb状态
+
 typedef enum _RECIPIENT_TYPE
 {
 	DEVICE_RECIPIENT,     /* Recipient device */
@@ -139,7 +151,6 @@ typedef struct _DEVICE_INFO
 
 typedef struct _DEVICE_PROP
 {
-	void (*Init)(void);        /* Initialize the device */
 	void (*Reset)(void);       /* Reset routine of this device */
 
 	/* Device dependent process after the status stage */

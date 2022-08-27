@@ -18,15 +18,9 @@
 /* tx buffer base address */
 #define ENDP2_TXADDR        (0x120)
 
-/* mask defining which events has to be handled */
-/* by the device application software */
-#define IMR_MSK (CNTR_CTRM  | CNTR_WKUPM | CNTR_SUSPM | CNTR_ERRM  | CNTR_SOFM \
-                 | CNTR_ESOFM | CNTR_RESETM )
-
 void keyboard_send(u8 *buf);
 void mouse_send(u8 *buf);
 
-extern  vu32 bDeviceState; /* USB device status */
 extern vu32 fSuspendEnabled;  /* true when suspend is possible */
 
 typedef enum _HID_REQUESTS
@@ -41,7 +35,6 @@ typedef enum _HID_REQUESTS
 } HID_REQUESTS;
 
 void usb_ini(void);
-void Joystick_init(void);
 void Joystick_Reset(void);
 void Joystick_SetConfiguration(void);
 void Joystick_SetDeviceAddress (void);

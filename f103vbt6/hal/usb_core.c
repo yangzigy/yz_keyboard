@@ -2,7 +2,8 @@
 #include "f1_usb.h"
 #include "usb_core.h"
 
-int Total_Configuration=1; //配置数
+DEVICE_STATE usb_stat=USB_UNCONNECTED; //usb状态
+
 extern DEVICE_PROP *pProperty;
 extern DEVICE_INFO *pInformation;
 extern USER_STANDARD_REQUESTS  *pUser_Standard_Requests;
@@ -10,7 +11,7 @@ extern USER_STANDARD_REQUESTS  *pUser_Standard_Requests;
 #define ValBit(VAR,Place)    (VAR & (1 << Place))
 #define SetBit(VAR,Place)    (VAR |= (1 << Place))
 #define ClrBit(VAR,Place)    (VAR &= ((1 << Place) ^ 255))
-#define Send0LengthData() { _SetEPTxCount(ENDP0, 0); \
+#define Send0LengthData() { _SetEPTxCount(0, 0); \
 	vSetEPTxStatus(EP_TX_VALID); \
 }
 
@@ -47,12 +48,12 @@ u8 *Standard_GetConfiguration(u16 Length)
 {
 	if (Length == 0)
 	{
-		pInformation->Ctrl_Info.Usb_wLength =
-			sizeof(pInformation->Current_Configuration);
+		pInformation->Ctrl_Info.Usb_wLength =1;
 		return 0;
 	}
-	pUser_Standard_Requests->User_GetConfiguration();
-	return (u8 *)&pInformation->Current_Configuration;
+	//pUser_Standard_Requests->User_GetConfiguration();
+	//return (u8 *)&pInformation->Current_Configuration;
+	return 0;
 }
 
 /*******************************************************************************
@@ -66,8 +67,7 @@ u8 *Standard_GetConfiguration(u16 Length)
  *******************************************************************************/
 RESULT Standard_SetConfiguration(void)
 {
-	if ((pInformation->USBwValue0 <=
-				Total_Configuration) && (pInformation->USBwValue1 == 0)
+	if ((pInformation->USBwValue0 <= 1) && (pInformation->USBwValue1 == 0)
 			&& (pInformation->USBwIndex == 0)) /*call Back usb spec 2.0*/
 	{
 		pInformation->Current_Configuration = pInformation->USBwValue0;
@@ -251,7 +251,7 @@ RESULT Standard_ClearFeature(void)
 
 		wIndex0 = pInformation->USBwIndex0;
 		rEP = wIndex0 & ~0x80;
-		Related_Endpoint = ENDP0 + rEP;
+		Related_Endpoint = 0 + rEP;
 
 		if (ValBit(pInformation->USBwIndex0, 7))
 		{
@@ -285,7 +285,7 @@ RESULT Standard_ClearFeature(void)
 			/* OUT endpoint */
 			if (_GetRxStallStatus(Related_Endpoint))
 			{
-				if (Related_Endpoint == ENDP0)
+				if (Related_Endpoint == 0)
 				{
 					/* After clear the STALL, enable the default endpoint receiver */
 					SetEPRxCount(Related_Endpoint, Device_Property.MaxPacketSize);
@@ -322,7 +322,7 @@ RESULT Standard_SetEndPointFeature(void)
 
 	wIndex0 = pInformation->USBwIndex0;
 	rEP = wIndex0 & ~0x80;
-	Related_Endpoint = ENDP0 + rEP;
+	Related_Endpoint = 0 + rEP;
 
 	if (ValBit(pInformation->USBwIndex0, 7))
 	{
@@ -435,14 +435,14 @@ void DataStageOut(void)
 		Buffer = (*pEPinfo->CopyData)(Length);
 		pEPinfo->Usb_rLength -= Length;
 		pEPinfo->Usb_rOffset += Length;
-		PMAToUserBufferCopy(Buffer, GetEPRxAddr(ENDP0), Length);
+		PMAToUserBufferCopy(Buffer, GetEPRxAddr(0), Length);
 
 	}
 
 	if (pEPinfo->Usb_rLength != 0)
 	{
 		vSetEPRxStatus(EP_RX_VALID);/* re-enable for next data reception */
-		SetEPTxCount(ENDP0, 0);
+		SetEPTxCount(0, 0);
 		vSetEPTxStatus(EP_TX_VALID);/* Expect the host to abort the data OUT stage */
 	}
 	/* Set the next State*/
@@ -510,9 +510,9 @@ void DataStageIn(void)
 
 	DataBuffer = (*pEPinfo->CopyData)(Length);
 
-	UserToPMABufferCopy(DataBuffer, _GetEPTxAddr(ENDP0), Length);
+	UserToPMABufferCopy(DataBuffer, _GetEPTxAddr(0), Length);
 
-	SetEPTxCount(ENDP0, Length);
+	SetEPTxCount(0, Length);
 
 	pEPinfo->Usb_wLength -= Length;
 	pEPinfo->Usb_wOffset += Length;
@@ -663,8 +663,6 @@ void Data_Setup0(void)
 	u32 Related_Endpoint, Reserved;
 	u32 wOffset, Status;
 
-
-
 	CopyRoutine = 0;
 	wOffset = 0;
 
@@ -736,7 +734,6 @@ void Data_Setup0(void)
 		}
 
 	}
-
 	/*GET CONFIGURATION*/
 	else if (Request_No == GET_CONFIGURATION)
 	{
@@ -841,7 +838,7 @@ u8 Setup0_Process(void)
 	} pBuf;
 	u16 offset = 1;
 
-	pBuf.b = PMAAddr + (u8 *)(_GetEPRxAddr(ENDP0) * 2); /* *2 for 32 bits addr */
+	pBuf.b = PMAAddr + (u8 *)(_GetEPRxAddr(0) * 2); /* *2 for 32 bits addr */
 
 	if (pInformation->ControlState != PAUSE)
 	{
@@ -959,7 +956,7 @@ u8 Out0_Process(void)
  *******************************************************************************/
 u8 Post0_Process(void)
 {
-	SetEPRxCount(ENDP0, Device_Property.MaxPacketSize);
+	SetEPRxCount(0, Device_Property.MaxPacketSize);
 	if (pInformation->ControlState == STALLED)
 	{
 		vSetEPRxStatus(EP_RX_STALL);

@@ -281,7 +281,7 @@ void key_ini(void)
 		keys_none0++;
 	}
 }
-u8 mousebuf[5]={1,0,0,0,0}; //鼠标发送缓存
+s8 mousebuf[5]={1,0,0,0,0}; //鼠标发送缓存
 u8 keybuf[8]={0,0,0,0,0,0,0,0}; //按键发送缓存
 int keybufp=2; //位置
 void putkey(u32 key) //发现一个键按下
@@ -439,7 +439,7 @@ void key_scan(void) //100Hz
 		mousebuf[2]=mouse_xdelta;
 		mousebuf[3]=mouse_ydelta;
 		mousebuf[4]=mouse_zdelta;
-		mouse_send(mousebuf);
+		mouse_send((u8*)mousebuf);
 	}
 	if(keys[KEY_cfg].state==0) //cfg键释放事件
 	{
