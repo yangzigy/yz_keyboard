@@ -39,7 +39,6 @@ typedef enum _STANDARD_REQUESTS
 	TOTAL_sREQUEST,  /* Total number of Standard request */
 	SYNCH_FRAME = 12
 } STANDARD_REQUESTS;
-/* Definition of "USBwValue" */
 typedef enum _DESCRIPTOR_TYPE
 {
 	DEVICE_DESCRIPTOR = 1,
@@ -72,8 +71,7 @@ typedef struct OneDescriptor
 {
 	u8 *Descriptor;
 	u16 Descriptor_Size;
-}
-ONE_DESCRIPTOR, *PONE_DESCRIPTOR;
+} ONE_DESCRIPTOR, *PONE_DESCRIPTOR;
 /* All the request process routines return a value of this type
    If the return value is not SUCCESS or NOT_READY,
    the software will STALL the correspond endpoint */
@@ -85,59 +83,64 @@ typedef enum _RESULT
 	USB_NOT_READY       /* The process has not been finished, endpoint will be
 						   NAK to further request */
 } RESULT;
-
-
-/*-*-*-*-*-*-*-*-*-*-* Definitions for endpoint level -*-*-*-*-*-*-*-*-*-*-*-*/
-typedef struct _ENDPOINT_INFO
+typedef struct 
 {
-	/* When send data out of the device,
+	/* 设备发送数据时
 	   CopyData() is used to get data buffer 'Length' bytes data
-	   if Length is 0,
-	   CopyData() returns the total length of the data
+	   Length为0时：CopyData() 返回数据总数
 	   if the request is not supported, returns 0
 	   (NEW Feature )
 	   if CopyData() returns -1, the calling routine should not proceed
 	   further and will resume the SETUP process by the class device
-	   if Length is not 0,
-	   CopyData() returns a pointer to indicate the data location
-	   Usb_wLength is the data remain to be sent,
+	   Length非0时：CopyData() 返回数据位置
+	   Usb_wLength 剩余发送数
 	   Usb_wOffset is the Offset of original data
-	   When receive data from the host,
-	   CopyData() is used to get user data buffer which is capable
-	   of Length bytes data to copy data from the endpoint buffer.
-	   if Length is 0,
-	   CopyData() returns the available data length,
-	   if Length is not 0,
-	   CopyData() returns user buffer address
-	   Usb_rLength is the data remain to be received,
+	   设备接收数据时 CopyData() 用于获得数据缓存，要求长度Length字节
+	   Length为0时：CopyData() 返回有效数据长度
+	   Length非0时：CopyData() 返回缓存地址
+	   Usb_rLength 剩余接收数
 	   Usb_rPointer is the Offset of data buffer
 	   */
 	u16  Usb_wLength;
-	u16  Usb_wOffset;
+	u16  Usb_wOffset; //发送时的分批发送的位置
 	u16  PacketSize;
 	u8   *(*CopyData)(u16 Length);
 }ENDPOINT_INFO;
 
-extern int Total_Configuration;/* Number of configuration available */
-
 typedef union
 {
 	u16 w;
-	struct BW
+	struct
 	{
-		u8 bb1;
-		u8 bb0;
-	}
-	bw;
-} uint16_t_uint8_t;
+		u8 b0;
+		u8 b1;
+	} b;
+} S_U16_U8;
 
+#pragma pack(1)
+typedef struct //在USB缓存中，4个字节有2个空
+{
+	u8 USBbmRequestType;
+	u8 USBbRequest;
+	u16 res0;
+
+	S_U16_U8 vals;
+	u16 res1;
+
+	S_U16_U8 inds;
+	u16 res2;
+
+	S_U16_U8 lens;
+	u16 res3;
+} S_SETUP0_RX; //setup0接收结构
+#pragma pack()
 typedef struct _DEVICE_INFO
 {
 	u8 USBbmRequestType;       /* bmRequestType */
 	u8 USBbRequest;            /* bRequest */
-	uint16_t_uint8_t USBwValues;         /* wValue */
-	uint16_t_uint8_t USBwIndexs;         /* wIndex */
-	uint16_t_uint8_t USBwLengths;        /* wLength */
+	S_U16_U8 vals;         /* wValue */
+	S_U16_U8 inds;         /* wIndex */
+	S_U16_U8 lens;        /* wLength */
 
 	u8 ControlState;           /* of type CONTROL_STATE */
 	u8 Current_Feature;
@@ -145,18 +148,11 @@ typedef struct _DEVICE_INFO
 	u8 Current_Interface;       /* Selected interface of current configuration */
 	u8 Current_AlternateSetting;/* Selected Alternate Setting of current
 								   interface*/
-
 	ENDPOINT_INFO Ctrl_Info;
 }DEVICE_INFO;
 
 typedef struct _DEVICE_PROP
 {
-	void (*Reset)(void);       /* Reset routine of this device */
-
-	/* Device dependent process after the status stage */
-	void (*Process_Status_IN)(void);
-	void (*Process_Status_OUT)(void);
-
 	/* Procedure of process on setup stage of a class specified request with data stage */
 	/* All class specified requests with data stage are processed in Class_Data_Setup
 	   Class_Data_Setup()
@@ -200,27 +196,7 @@ the individual classes, they will be checked and processed here.
 	u8* (*GetConfigDescriptor)(u16 Length);
 	u8* (*GetStringDescriptor)(u16 Length);
 
-	/* This field is not used in current library version. It is kept only for 
-	   compatibility with previous versions */
-	void* RxEP_buffer;
-
-	u8 MaxPacketSize;
-
 }DEVICE_PROP;
-
-typedef struct _USER_STANDARD_REQUESTS
-{
-	void (*User_GetConfiguration)(void);       /* Get Configuration */
-	void (*User_SetConfiguration)(void);       /* Set Configuration */
-	void (*User_GetInterface)(void);           /* Get Interface */
-	void (*User_SetInterface)(void);           /* Set Interface */
-	void (*User_GetStatus)(void);              /* Get Status */
-	void (*User_ClearFeature)(void);           /* Clear Feature */
-	void (*User_SetEndPointFeature)(void);     /* Set Endpoint Feature */
-	void (*User_SetDeviceFeature)(void);       /* Set Device Feature */
-	void (*User_SetDeviceAddress)(void);       /* Set Device Address */
-}
-USER_STANDARD_REQUESTS;
 
 #define REQUEST_TYPE      0x60  /* Mask to get request type */
 #define STANDARD_REQUEST  0x00  /* Standard request */
@@ -229,20 +205,7 @@ USER_STANDARD_REQUESTS;
 
 #define RECIPIENT         0x1F  /* Mask to get recipient */
 /* Exported constants --------------------------------------------------------*/
-#define Type_Recipient (pInformation->USBbmRequestType & (REQUEST_TYPE | RECIPIENT))
-
-#define Usb_rLength Usb_wLength
-#define Usb_rOffset Usb_wOffset
-
-#define USBwValue USBwValues.w
-#define USBwValue0 USBwValues.bw.bb0
-#define USBwValue1 USBwValues.bw.bb1
-#define USBwIndex USBwIndexs.w
-#define USBwIndex0 USBwIndexs.bw.bb0
-#define USBwIndex1 USBwIndexs.bw.bb1
-#define USBwLength USBwLengths.w
-#define USBwLength0 USBwLengths.bw.bb0
-#define USBwLength1 USBwLengths.bw.bb1
+#define Type_Recipient (Device_Info.USBbmRequestType & (REQUEST_TYPE | RECIPIENT))
 
 u8 Setup0_Process(void);
 u8 Post0_Process(void);
@@ -263,8 +226,8 @@ RESULT Standard_ClearFeature(void);
 void SetDeviceAddress(u8);
 void NOP_Process(void);
 
+extern u8 MaxPacketSize;
 extern DEVICE_PROP Device_Property;
-extern  USER_STANDARD_REQUESTS User_Standard_Requests;
 extern DEVICE_INFO Device_Info;
 
 /* cells saving status during interrupt servicing */

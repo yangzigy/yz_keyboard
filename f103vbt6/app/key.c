@@ -376,7 +376,7 @@ void key_scan(void) //100Hz
 			mousebuf[2]=mouse_xdelta;
 			mousebuf[3]=mouse_ydelta;
 			mousebuf[4]=(mouse_tick&7)==0?mouse_zdelta+0.6:0;
-			mouse_send(mousebuf);
+			mouse_send((u8*)mousebuf);
 		}
 		else //非鼠标操作
 		{
@@ -384,7 +384,7 @@ void key_scan(void) //100Hz
 			mousebuf[2]=mouse_xdelta;
 			mousebuf[3]=mouse_ydelta;
 			mousebuf[4]=mouse_zdelta;
-			mouse_send(mousebuf);
+			mouse_send((u8*)mousebuf);
 			if(keys[KEY_a].state) //若是home等
 			{
 				if(keys[KEY_k].state) { putkey(KEY_PageUp); }

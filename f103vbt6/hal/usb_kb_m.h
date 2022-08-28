@@ -37,7 +37,6 @@ typedef enum _HID_REQUESTS
 void usb_ini(void);
 void Joystick_Reset(void);
 void Joystick_SetConfiguration(void);
-void Joystick_SetDeviceAddress (void);
 void Joystick_Status_In (void);
 void Joystick_Status_Out (void);
 RESULT Joystick_Data_Setup(u8);
@@ -57,17 +56,6 @@ u8 *KP_GetReportDescriptor(u16 Length);
 u8 *Mouse_GetHIDDescriptor(u16 Length);
 u8 *KP_GetHIDDescriptor(u16 Length);
 /***********************************************/
-
-/* Exported define -----------------------------------------------------------*/
-#define Joystick_GetConfiguration          NOP_Process
-//#define Joystick_SetConfiguration          NOP_Process
-#define Joystick_GetInterface              NOP_Process
-#define Joystick_SetInterface              NOP_Process
-#define Joystick_GetStatus                 NOP_Process
-#define Joystick_ClearFeature              NOP_Process
-#define Joystick_SetEndPointFeature        NOP_Process
-#define Joystick_SetDeviceFeature          NOP_Process
-//#define Joystick_SetDeviceAddress          NOP_Process
 
 #define REPORT_DESCRIPTOR                  0x22
 

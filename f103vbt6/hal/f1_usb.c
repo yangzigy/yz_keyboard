@@ -3,195 +3,101 @@
 #include "usb_core.h"
 
 int EP_num=1; //总共多少个端点
-void SetEPType(u8 i, u16 wType) //设置端点类型
+void SetEPType(u8 i, u16 d) //设置端点类型
 {
 	//先清零写0无效的位，再置位写1无效的位
-	//USB_EP(i)=(USB_EP(i) & EP_T_MASK) | wType;
-	USB_EP(i)=(USB_EP(i) & (~(EPREG_0_SET & (3<<9)))) | EPREG_1_SET | wType;
+	USB_EP(i)=(USB_EP(i) & (~(EPREG_0_SET & (3<<9)))) | EPREG_1_SET | d;
 }
-
-void SetEPTxStatus(u8 bEpNum, u16 wState)
+void SetEPTxStatus(u8 i, u16 d) //设置端点发送状态
 {
-	_SetEPTxStatus(bEpNum, wState);
+	u16 t;
+	t=USB_EP(i) & ((~EPREG_0_SET) | (3<<4)); //先清零写0无效的位，排除需要设置的位
+	//t = USB_EP(i) & EPTX_DTOGMASK;
+	if(((1<<4) & d)!= 0) t ^= (1<<4);
+	if(((1<<5) & d)!= 0) t ^= (1<<5);
+	USB_EP(i)= (t | EPREG_1_SET); //再置位写1无效的位
 }
-
-/*******************************************************************************
- * Function Name  : SetEPRxStatus
- * Description    : Set the status of Rx endpoint.
- * Input          : bEpNum: Endpoint Number. 
- *                  wState: new state.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void SetEPRxStatus(u8 bEpNum, u16 wState)
+void SetEPRxStatus(u8 i, u16 d) //设置端点接收状态
 {
-	_SetEPRxStatus(bEpNum, wState);
+	u16 t;
+	t=USB_EP(i) & ((~EPREG_0_SET) | (3<<12)); //先清零写0无效的位，排除需要设置的位
+	//t = USB_EP(i) & EPTX_DTOGMASK;
+	if(((1<<12) & d)!= 0) t ^= (1<<12);
+	if(((1<<13) & d)!= 0) t ^= (1<<13);
+	USB_EP(i)= (t | EPREG_1_SET); //再置位写1无效的位
 }
-void SetEPTxValid(u8 bEpNum)
+void SetEPRxTxStatus(u8 i, u16 rx,u16 tx) //设置端点发送、接收状态
 {
-	_SetEPTxStatus(bEpNum, EP_TX_VALID);
+	u16 t;
+	t=USB_EP(i) & ((~EPREG_0_SET) | (3<<4) | (3<<12)); //先清零写0无效的位，排除需要设置的位
+	if(((1<<12) & rx)!= 0) t ^= (1<<12);
+	if(((1<<13) & rx)!= 0) t ^= (1<<13);
+	if(((1<<4) & tx)!= 0) t ^= (1<<4);
+	if(((1<<5) & tx)!= 0) t ^= (1<<5);
+	USB_EP(i)= (t | EPREG_1_SET); //再置位写1无效的位
 }
-
-/*******************************************************************************
- * Function Name  : SetEPRxValid
- * Description    : Valid the endpoint Rx Status.
- * Input          : bEpNum: Endpoint Number. 
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void SetEPRxValid(u8 bEpNum)
+void ClearDTOG_RX(u8 i)
 {
-	_SetEPRxStatus(bEpNum, EP_RX_VALID);
-}
-
-void Clear_Status_Out(u8 bEpNum)
-{
-	_ClearEP_KIND(bEpNum);
-}
-void ClearDTOG_RX(u8 bEpNum)
-{
-	_ClearDTOG_RX(bEpNum);
-}
-/*******************************************************************************
- * Function Name  : ClearDTOG_TX.
- * Description    : Clear the DTOG_TX bit.
- * Input          : bEpNum: Endpoint Number. 
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void ClearDTOG_TX(u8 bEpNum)
-{
-	_ClearDTOG_TX(bEpNum);
-}
-void SetEPTxAddr(u8 bEpNum, u16 wAddr)
-{
-	_SetEPTxAddr(bEpNum, wAddr);
-}
-/*******************************************************************************
- * Function Name  : SetEPRxAddr
- * Description    : Set the endpoint Rx buffer address.
- * Input          : bEpNum: Endpoint Number.
- *                  wAddr: new address.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void SetEPRxAddr(u8 bEpNum, u16 wAddr)
-{
-	_SetEPRxAddr(bEpNum, wAddr);
-}
-/*******************************************************************************
- * Function Name  : GetEPRxAddr.
- * Description    : Returns the endpoint Rx buffer address.
- * Input          : bEpNum: Endpoint Number. 
- * Output         : None.
- * Return         : Rx buffer address.
- *******************************************************************************/
-u16 GetEPRxAddr(u8 bEpNum)
-{
-	return(_GetEPRxAddr(bEpNum));
-}
-/*******************************************************************************
- * Function Name  : SetEPTxCount.
- * Description    : Set the Tx count.
- * Input          : bEpNum: Endpoint Number.
- *                  wCount: new count value.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void SetEPTxCount(u8 bEpNum, u16 wCount)
-{
-	_SetEPTxCount(bEpNum, wCount);
-}
-void SetEPRxCount(u8 bEpNum, u16 wCount)
-{
-	_SetEPRxCount(bEpNum, wCount);
-}
-u16 ByteSwap(u16 wSwW)
-{
-	u8 bTemp;
-	u16 wRet;
-	bTemp = (u8)(wSwW & 0xff);
-	wRet =  (wSwW >> 8) | ((u16)bTemp << 8);
-	return(wRet);
-}
-
-/*******************************************************************************
- * Function Name  : UserToPMABufferCopy
- * Description    : Copy a buffer from user memory area to packet memory area (PMA)
- * Input          : - pbUsrBuf: pointer to user memory area.
- *                  - wPMABufAddr: address into PMA.
- *                  - wNBytes: no. of bytes to be copied.
- * Output         : None.
- * Return         : None	.
- *******************************************************************************/
-void UserToPMABufferCopy(uint8_t *pbUsrBuf, uint16_t wPMABufAddr, uint16_t wNBytes)
-{
-	uint32_t n = (wNBytes + 1) >> 1;   /* n = (wNBytes + 1) / 2 */
-	uint32_t i, temp1, temp2;
-	uint16_t *pdwVal;
-	pdwVal = (uint16_t *)(wPMABufAddr * 2 + PMAAddr);
-	for (i = n; i != 0; i--)
+	if((USB_EP(i) & (1<<14)) != 0) //DTOG_RX没法直接给0，只能翻转
 	{
-		temp1 = (uint16_t) * pbUsrBuf;
-		pbUsrBuf++;
-		temp2 = temp1 | (uint16_t) * pbUsrBuf << 8;
-		*pdwVal++ = temp2;
-		pdwVal++;
-		pbUsrBuf++;
+		//先清零写0无效的位，再置位写1无效的位
+		USB_EP(i)=(USB_EP(i) & EPREG_MASK) | EPREG_1_SET | (1<<14); //DTOG_RX
+	}
+}
+void ClearDTOG_TX(u8 i)
+{
+	if((USB_EP(i) & (1<<6)) != 0) //DTOG_TX 没法直接给0，只能翻转
+	{
+		//先清零写0无效的位，再置位写1无效的位
+		USB_EP(i)=(USB_EP(i) & EPREG_MASK) | EPREG_1_SET | (1<<6); //DTOG_TX
+	}
+}
+void SetEPRxCount(u8 port, u16 n) //设置接收缓存大小
+{
+	u16 block_n; //block数量，根据总字节数，有两种块大小
+	if(n > 62)
+	{
+		block_n = n >> 5; //0表示1个块
+		if((n & 0x1f) == 0) block_n--;
+		USB_BT[port].COUNT_RX = (block_n << 10) | 0x8000; //32字节块
+	}
+	else
+	{
+		block_n = n >> 1;
+		if((n & 0x1) != 0)
+		block_n++;
+		USB_BT[port].COUNT_RX = block_n << 10;
+	}
+}
+void UserToPMABufferCopy(u8 *p, u16 ind, u16 n) //将CPU数据复制到USB地址下的缓存
+{
+	u32 i;
+	n = (n + 1) >> 1; //n = (n + 1) / 2 字节数改为字数
+	u16 *p_usb_b = (u16 *)(ind * 2 + PMAAddr); //CPU读取USB缓存的地址，16bit字转32bit字的地址
+	for(i = 0; i<n; i++)//一个循环写一个字
+	{
+		p_usb_b[i<<1] = ((u16*)p)[i];
+	}
+}
+void PMAToUserBufferCopy(u8 *p, u16 ind, u16 n)//将USB字复制到CPU地址下
+{
+	u32 i;
+	n = (n + 1) >> 1; //n = (n + 1) / 2 字节数改为字数
+	u16 *p_usb_b = (u16 *)(ind * 2 + PMAAddr); //CPU读取USB缓存的地址，16bit字转32bit字的地址
+	for(i = 0; i<n; i++)//一个循环写一个字
+	{
+		((u16*)p)[i] = p_usb_b[i<<1];
 	}
 }
 
-/*******************************************************************************
- * Function Name  : PMAToUserBufferCopy
- * Description    : Copy a buffer from user memory area to packet memory area (PMA)
- * Input          : - pbUsrBuf    = pointer to user memory area.
- *                  - wPMABufAddr = address into PMA.
- *                  - wNBytes     = no. of bytes to be copied.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void PMAToUserBufferCopy(uint8_t *pbUsrBuf, uint16_t wPMABufAddr, uint16_t wNBytes)
+void usb_hal_ini(void) //usb片上外设初始化
 {
-	uint32_t n = (wNBytes + 1) >> 1;/* /2*/
-	uint32_t i;
-	uint32_t *pdwVal;
-	pdwVal = (uint32_t *)(wPMABufAddr * 2 + PMAAddr);
-	for (i = n; i != 0; i--)
-	{
-		*(uint16_t*)pbUsrBuf++ = *pdwVal++;
-		pbUsrBuf++;
-	}
-}
+	RCC->CFGR &= ~(1<<22); //USBclk=PLLclk/1.5=48Mhz
+	RCC->APB1ENR |= RCC_APB1ENR_USBEN; //USB时钟使能
 
-/*  The number of current device, it is an index to the Device_Table */
-/* u8	Device_no; */
-/*  Points to the DEVICE_INFO structure of current device */
-/*  The purpose of this register is to speed up the execution */
-DEVICE_INFO *pInformation;
-/*  Points to the DEVICE_PROP structure of current device */
-/*  The purpose of this register is to speed up the execution */
-DEVICE_PROP *pProperty;
-/*  Temporary save the state of Rx & Tx status. */
-/*  Whenever the Rx or Tx state is changed, its value is saved */
-/*  in this variable first and will be set to the EPRB or EPRA */
-/*  at the end of interrupt process */
-u16	SaveState ;
-DEVICE_INFO	Device_Info;
-USER_STANDARD_REQUESTS  *pUser_Standard_Requests;
-
-void usb_hal_ini(void)
-{
-	RCC->CFGR&=~(1<<22); //USBclk=PLLclk/1.5=48Mhz
-	RCC->APB1ENR|=1<<23; //USB时钟使能
-
-	EXTI->IMR|=1<<18;//  开启线18上的中断
-	EXTI->RTSR|=1<<18;//line 18上事件上升降沿触发	 
+	EXTI->IMR |= 1<<18;//  开启线18上的中断
+	EXTI->RTSR |= 1<<18;//line 18上事件上升降沿触发	 
 	MY_NVIC_Init(0,0,USB_LP_CAN1_RX0_IRQn,0);
 	MY_NVIC_Init(0,0,USBWakeUp_IRQn,0);
-
-	pInformation = &Device_Info;
-	pInformation->ControlState = 2;
-	pProperty = &Device_Property;
-	pUser_Standard_Requests = &User_Standard_Requests;
 }
 
