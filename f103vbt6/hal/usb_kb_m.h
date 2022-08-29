@@ -21,8 +21,6 @@
 void keyboard_send(u8 *buf);
 void mouse_send(u8 *buf);
 
-extern vu32 fSuspendEnabled;  /* true when suspend is possible */
-
 typedef enum _HID_REQUESTS
 {
 	GET_REPORT = 1,
@@ -41,7 +39,6 @@ void Joystick_Status_In (void);
 void Joystick_Status_Out (void);
 RESULT Joystick_Data_Setup(u8);
 RESULT Joystick_NoData_Setup(u8);
-RESULT Joystick_Get_Interface_Setting(u8 Interface, u8 AlternateSetting);
 u8 *Joystick_GetDeviceDescriptor(u16 );
 u8 *Joystick_GetConfigDescriptor(u16);
 u8 *Joystick_GetStringDescriptor(u16);

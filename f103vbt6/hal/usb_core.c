@@ -7,12 +7,6 @@ u8 MaxPacketSize=64;
 
 DEVICE_INFO	Device_Info;
 
-#define ValBit(VAR,Place)    (VAR & (1 << Place))
-#define SetBit(VAR,Place)    (VAR |= (1 << Place))
-#define ClrBit(VAR,Place)    (VAR &= ((1 << Place) ^ 255))
-
-S_U16_U8 StatusInfo;
-
 int Data_Mul_MaxPacketSize = 0;
 /* Private function prototypes -----------------------------------------------*/
 static void DataStageOut(void);
@@ -20,312 +14,6 @@ static void DataStageIn(void);
 static void NoData_Setup0(void);
 static void Data_Setup0(void);
 
-/*******************************************************************************
- * Function Name  : Standard_GetConfiguration.
- * Description    : Return the current configuration variable address.
- * Input          : Length - How many bytes are needed.
- * Output         : None.
- * Return         : Return 1 , if the request is invalid when "Length" is 0.
- *                  Return "Buffer" if the "Length" is not 0.
- *******************************************************************************/
-u8 *Standard_GetConfiguration(u16 Length)
-{
-	if (Length == 0)
-	{
-		Device_Info.Ctrl_Info.Usb_wLength =1;
-		return 0;
-	}
-	return 0;
-}
-/*******************************************************************************
- * Function Name  : Standard_SetConfiguration.
- * Description    : This routine is called to set the configuration value
- *                  Then each class should configure device itself.
- * Input          : None.
- * Output         : None.
- * Return         : Return USB_SUCCESS, if the request is performed.
- *                  Return USB_UNSUPPORT, if the request is invalid.
- *******************************************************************************/
-RESULT Standard_SetConfiguration(void)
-{
-	if ((Device_Info.vals.b.b1 <= 1) && (Device_Info.vals.b.b0 == 0)
-			&& (Device_Info.inds.w == 0)) /*call Back usb spec 2.0*/
-	{
-		Device_Info.Current_Configuration = Device_Info.vals.b.b1;
-		return USB_SUCCESS;
-	}
-	else
-	{
-		return USB_UNSUPPORT;
-	}
-}
-/*******************************************************************************
- * Function Name  : Standard_GetInterface.
- * Description    : Return the Alternate Setting of the current interface.
- * Input          : Length - How many bytes are needed.
- * Output         : None.
- * Return         : Return 0, if the request is invalid when "Length" is 0.
- *                  Return "Buffer" if the "Length" is not 0.
- *******************************************************************************/
-u8 *Standard_GetInterface(u16 Length)
-{
-	if (Length == 0)
-	{
-		Device_Info.Ctrl_Info.Usb_wLength = sizeof(Device_Info.Current_AlternateSetting);
-		return 0;
-	}
-	return (u8 *)&Device_Info.Current_AlternateSetting;
-}
-
-/*******************************************************************************
- * Function Name  : Standard_SetInterface.
- * Description    : This routine is called to set the interface.
- *                  Then each class should configure the interface them self.
- * Input          : None.
- * Output         : None.
- * Return         : - Return USB_SUCCESS, if the request is performed.
- *                  - Return USB_UNSUPPORT, if the request is invalid.
- *******************************************************************************/
-RESULT Standard_SetInterface(void)
-{
-	RESULT Re;
-	/*Test if the specified Interface and Alternate Setting are supported by
-	  the application Firmware*/
-	Re = (Device_Property.Class_Get_Interface_Setting)(Device_Info.inds.b.b1, Device_Info.vals.b.b1);
-	if (Device_Info.Current_Configuration != 0)
-	{
-		if ((Re != USB_SUCCESS) || (Device_Info.inds.b.b0 != 0)
-				|| (Device_Info.vals.b.b0 != 0))
-		{
-			return  USB_UNSUPPORT;
-		}
-		else if (Re == USB_SUCCESS)
-		{
-			Device_Info.Current_Interface = Device_Info.inds.b.b1;
-			Device_Info.Current_AlternateSetting = Device_Info.vals.b.b1;
-			return USB_SUCCESS;
-		}
-	}
-	return USB_UNSUPPORT;
-}
-/*******************************************************************************
- * Function Name  : Standard_GetStatus.
- * Description    : Copy the device request data to "StatusInfo buffer".
- * Input          : - Length - How many bytes are needed.
- * Output         : None.
- * Return         : Return 0, if the request is at end of data block,
- *                  or is invalid when "Length" is 0.
- *******************************************************************************/
-u8 *Standard_GetStatus(u16 Length)
-{
-	if (Length == 0)
-	{
-		Device_Info.Ctrl_Info.Usb_wLength = 2;
-		return 0;
-	}
-	/* Reset Status Information */
-	StatusInfo.w = 0;
-	if (Type_Recipient == (STANDARD_REQUEST | DEVICE_RECIPIENT))
-	{
-		/*Get Device Status */
-		u8 Feature = Device_Info.Current_Feature;
-		/* Remote Wakeup enabled */
-		if (ValBit(Feature, 5))
-		{
-			SetBit(StatusInfo.b.b0, 1);
-		}
-		else
-		{
-			ClrBit(StatusInfo.b.b0, 1);
-		}      
-
-		/* Bus-powered */
-		if (ValBit(Feature, 6))
-		{
-			SetBit(StatusInfo.b.b0, 0);
-		}
-		else /* Self-powered */
-		{
-			ClrBit(StatusInfo.b.b0, 0);
-		}
-	}
-	/*Interface Status*/
-	else if (Type_Recipient == (STANDARD_REQUEST | INTERFACE_RECIPIENT))
-	{
-		return (u8 *)&StatusInfo;
-	}
-	/*Get EndPoint Status*/
-	else if (Type_Recipient == (STANDARD_REQUEST | ENDPOINT_RECIPIENT))
-	{
-		u8 Related_Endpoint;
-		u8 wIndex0 = Device_Info.inds.b.b1;
-
-		Related_Endpoint = (wIndex0 & 0x0f);
-		if (ValBit(wIndex0, 7))
-		{
-			/* IN endpoint */
-			if (USB_EP(Related_Endpoint)==(1<<4)) //TX_STALL
-			{
-				SetBit(StatusInfo.b.b0, 0); /* IN Endpoint stalled */
-			}
-		}
-		else //OUT
-		{
-			if ((USB_EP(Related_Endpoint) & (3<<12)) == (1<<12))//RX_STALL
-			{
-				SetBit(StatusInfo.b.b0, 0); /* OUT Endpoint stalled */
-			}
-		}
-
-	}
-	else return 0;
-	return (u8 *)&StatusInfo;
-}
-
-/*******************************************************************************
- * Function Name  : Standard_ClearFeature.
- * Description    : Clear or disable a specific feature.
- * Input          : None.
- * Output         : None.
- * Return         : - Return USB_SUCCESS, if the request is performed.
- *                  - Return USB_UNSUPPORT, if the request is invalid.
- *******************************************************************************/
-RESULT Standard_ClearFeature(void)
-{
-	u32     Type_Rec = Type_Recipient;
-	u32     Status;
-	if (Type_Rec == (STANDARD_REQUEST | DEVICE_RECIPIENT))
-	{/*Device Clear Feature*/
-		ClrBit(Device_Info.Current_Feature, 5);
-		return USB_SUCCESS;
-	}
-	else if (Type_Rec == (STANDARD_REQUEST | ENDPOINT_RECIPIENT))
-	{/*EndPoint Clear Feature*/
-		u32 Related_Endpoint;
-		u32 wIndex0;
-		u32 rEP;
-
-		if ((Device_Info.vals.w != ENDPOINT_STALL)
-				|| (Device_Info.inds.b.b0 != 0))
-		{
-			return USB_UNSUPPORT;
-		}
-
-		wIndex0 = Device_Info.inds.b.b1;
-		rEP = wIndex0 & ~0x80;
-		Related_Endpoint = 0 + rEP;
-
-		if (ValBit(Device_Info.inds.b.b1, 7))
-		{
-			/*Get Status of endpoint & stall the request if the related_ENdpoint
-			  is Disabled*/
-			Status = USB_EP(Related_Endpoint) & (3<<4);
-		}
-		else
-		{
-			Status = USB_EP(Related_Endpoint) & (3<<12);
-		}
-
-		if ((rEP >= EP_num) || (Status == 0)
-				|| (Device_Info.Current_Configuration == 0))
-		{
-			return USB_UNSUPPORT;
-		}
-		if (wIndex0 & 0x80) //IN
-		{
-			if (USB_EP(Related_Endpoint)==(1<<4)) //TX_STALL
-			{
-				ClearDTOG_TX(Related_Endpoint);
-				SetEPTxStatus(Related_Endpoint, EP_TX_VALID);
-			}
-		}
-		else //OUT
-		{
-			if ((USB_EP(Related_Endpoint) & (3<<12)) == (1<<12))//RX_STALL
-			{
-				if (Related_Endpoint == 0)
-				{
-					/* After clear the STALL, enable the default endpoint receiver */
-					SetEPRxCount(Related_Endpoint, MaxPacketSize);
-					SetEPRxStatus(Related_Endpoint, (3<<12));
-				}
-				else
-				{
-					ClearDTOG_RX(Related_Endpoint);
-					SetEPRxStatus(Related_Endpoint, (3<<12));
-				}
-			}
-		}
-		return USB_SUCCESS;
-	}
-	return USB_UNSUPPORT;
-}
-
-/*******************************************************************************
- * Function Name  : Standard_SetEndPointFeature
- * Description    : Set or enable a specific feature of EndPoint
- * Input          : None.
- * Output         : None.
- * Return         : - Return USB_SUCCESS, if the request is performed.
- *                  - Return USB_UNSUPPORT, if the request is invalid.
- *******************************************************************************/
-RESULT Standard_SetEndPointFeature(void)
-{
-	u32    wIndex0;
-	u32    Related_Endpoint;
-	u32    rEP;
-	u32    Status;
-
-	wIndex0 = Device_Info.inds.b.b1;
-	rEP = wIndex0 & ~0x80;
-	Related_Endpoint = 0 + rEP;
-
-	if (ValBit(Device_Info.inds.b.b1, 7))
-	{
-		/* get Status of endpoint & stall the request if the related_ENdpoint
-		   is Disabled*/
-		Status = USB_EP(Related_Endpoint) & (3<<4);
-	}
-	else
-	{
-		Status = USB_EP(Related_Endpoint) & (3<<12);
-	}
-
-	if (Related_Endpoint >= EP_num
-			|| Device_Info.vals.w != 0 || Status == 0
-			|| Device_Info.Current_Configuration == 0)
-	{
-		return USB_UNSUPPORT;
-	}
-	else
-	{
-		if (wIndex0 & 0x80)
-		{
-			/* IN endpoint */
-			SetEPTxStatus(Related_Endpoint, (1<<4)); //TX_STALL
-		}
-		else
-		{
-			/* OUT endpoint */
-			SetEPRxStatus(Related_Endpoint, (1<<12)); //RX_STALL
-		}
-	}
-	return USB_SUCCESS;
-}
-
-/*******************************************************************************
- * Function Name  : Standard_SetDeviceFeature.
- * Description    : Set or enable a specific feature of Device.
- * Input          : None.
- * Output         : None.
- * Return         : - Return USB_SUCCESS, if the request is performed.
- *                  - Return USB_UNSUPPORT, if the request is invalid.
- *******************************************************************************/
-RESULT Standard_SetDeviceFeature(void)
-{
-	SetBit(Device_Info.Current_Feature, 5);
-	return USB_SUCCESS;
-}
 /*******************************************************************************
  * Function Name  : Standard_GetDescriptorData.
  * Description    : Standard_GetDescriptorData is used for descriptors transfer.
@@ -409,40 +97,33 @@ void DataStageOut(void)
 		}
 	}
 }
-/*******************************************************************************
- * Function Name  : DataStageIn.
- * Description    : Data stage of a Control Read Transfer.
- *******************************************************************************/
-void DataStageIn(void)
+void DataStageIn(void) //控制端点的发送数据 
 {
-	u32 save_wLength = Device_Info.Ctrl_Info.Usb_wLength;
-	u32 ControlState = Device_Info.ControlState;
-
 	u8 *DataBuffer;
 	u32 Length;
 
-	if ((save_wLength == 0) && (ControlState == LAST_IN_DATA))
+	if ((Device_Info.Ctrl_Info.Usb_wLength == 0) && (Device_Info.ControlState == LAST_IN_DATA)) //如果是最后一包
 	{
 		if(Data_Mul_MaxPacketSize) //没有数据，发送空包
 		{
 			USB_BT[0].COUNT_TX = 0;
 			SaveTState=EP_TX_VALID; 
 
-			ControlState = LAST_IN_DATA;
+			Device_Info.ControlState = LAST_IN_DATA;
 			Data_Mul_MaxPacketSize = 0;
 		}
 		else //没有数据了
 		{
-			ControlState = WAIT_STATUS_OUT;
+			Device_Info.ControlState = WAIT_STATUS_OUT;
 			SaveTState=(1<<4); //TX_STALL
 		}
-		goto Expect_Status_Out;
+		return ;
 	}
-	Length = Device_Info.Ctrl_Info.PacketSize;
-	ControlState = (save_wLength <= Length) ? LAST_IN_DATA : IN_DATA;
+	Length = Device_Info.Ctrl_Info.PacketSize; //按全长赋值
+	Device_Info.ControlState = (Device_Info.Ctrl_Info.Usb_wLength <= Length) ? LAST_IN_DATA : IN_DATA; //确定是否是最后一包
 
-	if (Length > save_wLength) Length = save_wLength;
-	DataBuffer = (Device_Info.Ctrl_Info.CopyData)(Length);
+	if (Length > Device_Info.Ctrl_Info.Usb_wLength) Length = Device_Info.Ctrl_Info.Usb_wLength;
+	DataBuffer = (Device_Info.Ctrl_Info.CopyData)(Length); //调用发送回调，准备数据
 
 	UserToPMABufferCopy(DataBuffer, USB_BT[0].ADDR_TX, Length);
 
@@ -453,8 +134,6 @@ void DataStageIn(void)
 	SaveTState=EP_TX_VALID;
 
 	SaveRState = EP_RX_VALID; //USB_StatusOut//期望host退出data IN
-Expect_Status_Out:
-	Device_Info.ControlState = ControlState;
 }
 
 /*******************************************************************************
@@ -466,115 +145,25 @@ Expect_Status_Out:
  *******************************************************************************/
 void NoData_Setup0(void)
 {
-	RESULT r = USB_UNSUPPORT;
-	u32 RequestNo = Device_Info.USBbRequest;
-	u32 ControlState;
-
-	if (Type_Recipient == (STANDARD_REQUEST | DEVICE_RECIPIENT))
+	if(Device_Info.type.s.req_type) goto UNSUPPORT; //不是标准请求
+	if(Device_Info.type.s.rx_type==0) //接收者为设备
 	{
-		/* Device Request*/
-		/* SET_CONFIGURATION*/
-		if (RequestNo == SET_CONFIGURATION)
-		{
-			r = Standard_SetConfiguration();
-		}
-		/*SET ADDRESS*/
-		else if (RequestNo == SET_ADDRESS)
+		if (Device_Info.req == SET_ADDRESS) //设置地址
 		{
 			if ((Device_Info.vals.b.b1 > 127) || (Device_Info.vals.b.b0 != 0)
-					|| (Device_Info.inds.w != 0)
-					|| (Device_Info.Current_Configuration != 0))
+					|| (Device_Info.inds.w != 0))
 				/* Device Address should be 127 or less*/
 			{
-				ControlState = STALLED;
-				goto exit_NoData_Setup0;
-			}
-			else
-			{
-				r = USB_SUCCESS;
-			}
-		}
-		/*SET FEATURE for Device*/
-		else if (RequestNo == SET_FEATURE)
-		{
-			if ((Device_Info.vals.b.b1 == DEVICE_REMOTE_WAKEUP) \
-					&& (Device_Info.inds.w == 0))
-			{
-				r = Standard_SetDeviceFeature();
-			}
-			else
-			{
-				r = USB_UNSUPPORT;
-			}
-		}
-		/*Clear FEATURE for Device */
-		else if (RequestNo == CLEAR_FEATURE)
-		{
-			if (Device_Info.vals.b.b1 == DEVICE_REMOTE_WAKEUP
-					&& Device_Info.inds.w == 0
-					&& ValBit(Device_Info.Current_Feature, 5))
-			{
-				r = Standard_ClearFeature();
-			}
-			else
-			{
-				r = USB_UNSUPPORT;
+				Device_Info.ControlState = STALLED;
+				return ;
 			}
 		}
 	}
-	/* Interface Request*/
-	else if (Type_Recipient == (STANDARD_REQUEST | INTERFACE_RECIPIENT))
-	{
-		/*SET INTERFACE*/
-		if (RequestNo == SET_INTERFACE)
-		{
-			r = Standard_SetInterface();
-		}
-	}
-	/* EndPoint Request*/
-	else if (Type_Recipient == (STANDARD_REQUEST | ENDPOINT_RECIPIENT))
-	{
-		/*CLEAR FEATURE for EndPoint*/
-		if (RequestNo == CLEAR_FEATURE)
-		{
-			r = Standard_ClearFeature();
-		}
-		/* SET FEATURE for EndPoint*/
-		else if (RequestNo == SET_FEATURE)
-		{
-			r = Standard_SetEndPointFeature();
-		}
-	}
-	else
-	{
-		r = USB_UNSUPPORT;
-	}
-
-
-	if (r != USB_SUCCESS)
-	{
-		r = (Device_Property.Class_NoData_Setup)(RequestNo);
-		if (r == USB_NOT_READY)
-		{
-			ControlState = PAUSE;
-			goto exit_NoData_Setup0;
-		}
-	}
-
-	if (r != USB_SUCCESS)
-	{
-		ControlState = STALLED;
-		goto exit_NoData_Setup0;
-	}
-
-	ControlState = WAIT_STATUS_IN;/* After no data stage SETUP */
-
+UNSUPPORT: //认为一定成功，那个r没用
 	//USB_StatusIn
 	USB_BT[0].COUNT_TX = 0;
 	SaveTState=EP_TX_VALID;
-exit_NoData_Setup0:
-	Device_Info.ControlState = ControlState;
-	return;
+	Device_Info.ControlState = WAIT_STATUS_IN;
 }
 
 /*******************************************************************************
@@ -588,15 +177,14 @@ void Data_Setup0(void)
 {
 	u8 *(*CopyRoutine)(u16);
 	RESULT r;
-	u32 Request_No = Device_Info.USBbRequest;
 
 	u32 Related_Endpoint, Reserved;
 	u32 Status;
 	CopyRoutine = 0;
 	/*GET DESCRIPTOR*/
-	if (Request_No == GET_DESCRIPTOR)
+	if (Device_Info.req == GET_DESCRIPTOR)
 	{
-		if (Type_Recipient == (STANDARD_REQUEST | DEVICE_RECIPIENT))
+		if(Device_Info.type.s.rx_type==0 && Device_Info.type.s.req_type==0) //标准请求，接收者为设备
 		{
 			u8 wValue1 = Device_Info.vals.b.b0;
 			if (wValue1 == DEVICE_DESCRIPTOR)
@@ -613,74 +201,6 @@ void Data_Setup0(void)
 			}
 		}
 	}
-	/*GET STATUS*/
-	else if ((Request_No == GET_STATUS) && (Device_Info.vals.w == 0)
-			&& (Device_Info.lens.w == 0x0002)
-			&& (Device_Info.inds.b.b0 == 0))
-	{
-		/* GET STATUS for Device*/
-		if ((Type_Recipient == (STANDARD_REQUEST | DEVICE_RECIPIENT))
-				&& (Device_Info.inds.w == 0))
-		{
-			CopyRoutine = Standard_GetStatus;
-		}
-
-		/* GET STATUS for Interface*/
-		else if (Type_Recipient == (STANDARD_REQUEST | INTERFACE_RECIPIENT))
-		{
-			if (((Device_Property.Class_Get_Interface_Setting)(Device_Info.inds.b.b1, 0) == USB_SUCCESS)
-					&& (Device_Info.Current_Configuration != 0))
-			{
-				CopyRoutine = Standard_GetStatus;
-			}
-		}
-
-		/* GET STATUS for EndPoint*/
-		else if (Type_Recipient == (STANDARD_REQUEST | ENDPOINT_RECIPIENT))
-		{
-			Related_Endpoint = (Device_Info.inds.b.b1 & 0x0f);
-			Reserved = Device_Info.inds.b.b1 & 0x70;
-
-			if (ValBit(Device_Info.inds.b.b1, 7))
-			{
-				/*Get Status of endpoint & stall the request if the related_ENdpoint
-				  is Disabled*/
-				Status = USB_EP(Related_Endpoint) & (3<<4);
-			}
-			else
-			{
-				Status = USB_EP(Related_Endpoint) & (3<<12);
-			}
-
-			if ((Related_Endpoint < EP_num) && (Reserved == 0)
-					&& (Status != 0))
-			{
-				CopyRoutine = Standard_GetStatus;
-			}
-		}
-
-	}
-	/*GET CONFIGURATION*/
-	else if (Request_No == GET_CONFIGURATION)
-	{
-		if (Type_Recipient == (STANDARD_REQUEST | DEVICE_RECIPIENT))
-		{
-			CopyRoutine = Standard_GetConfiguration;
-		}
-	}
-	/*GET INTERFACE*/
-	else if (Request_No == GET_INTERFACE)
-	{
-		if ((Type_Recipient == (STANDARD_REQUEST | INTERFACE_RECIPIENT))
-				&& (Device_Info.Current_Configuration != 0) && (Device_Info.vals.w == 0)
-				&& (Device_Info.inds.b.b0 == 0) && (Device_Info.lens.w == 0x0001)
-				&& ((Device_Property.Class_Get_Interface_Setting)(Device_Info.inds.b.b1, 0) == USB_SUCCESS))
-		{
-			CopyRoutine = Standard_GetInterface;
-		}
-
-	}
-
 	if (CopyRoutine)
 	{
 		Device_Info.Ctrl_Info.Usb_wOffset = 0;
@@ -692,14 +212,13 @@ void Data_Setup0(void)
 	}
 	else
 	{
-		r = (Device_Property.Class_Data_Setup)(Device_Info.USBbRequest);
+		r = (Device_Property.Class_Data_Setup)(Device_Info.req); //调用设备的处理
 		if (r == USB_NOT_READY)
 		{
 			Device_Info.ControlState = PAUSE;
 			return;
 		}
 	}
-
 	if (Device_Info.Ctrl_Info.Usb_wLength == 0xFFFF)
 	{
 		/* Data is not ready, wait it */
@@ -707,24 +226,19 @@ void Data_Setup0(void)
 		return;
 	}
 	if ((r == USB_UNSUPPORT) || (Device_Info.Ctrl_Info.Usb_wLength == 0))
-	{
-		/* Unsupported request */
+	{ //不支持的操作
 		Device_Info.ControlState = STALLED;
 		return;
 	}
-
-
-	if (ValBit(Device_Info.USBbmRequestType, 7))
+	if(Device_Info.type.s.dir) //1设备到主机
 	{
-		/* Device ==> Host */
-		vu32 wLength = Device_Info.lens.w;
+		vu32 wLength = Device_Info.lens;
 		/* Restrict the data length to be the one host asks for */
 		if (Device_Info.Ctrl_Info.Usb_wLength > wLength)
 		{
 			Device_Info.Ctrl_Info.Usb_wLength = wLength;
 		}
-
-		else if (Device_Info.Ctrl_Info.Usb_wLength < Device_Info.lens.w)
+		else if (Device_Info.Ctrl_Info.Usb_wLength < Device_Info.lens)
 		{
 			if (Device_Info.Ctrl_Info.Usb_wLength < MaxPacketSize)
 			{
@@ -738,7 +252,7 @@ void Data_Setup0(void)
 		Device_Info.Ctrl_Info.PacketSize = MaxPacketSize;
 		DataStageIn();
 	}
-	else
+	else //0主机到设备
 	{
 		Device_Info.ControlState = OUT_DATA;
 		SaveRState=EP_RX_VALID; /* enable for next data reception */
@@ -761,23 +275,16 @@ void Data_Setup0(void)
 #define S0 (*(S_SETUP0_RX*)(PMAAddr + (u8 *)(USB_BT[0].ADDR_RX * 2))) 
 u8 Setup0_Process(void)
 {
-	Device_Info.USBbmRequestType = S0.USBbmRequestType;
-	Device_Info.USBbRequest = S0.USBbRequest;
+	Device_Info.type.b = S0.type;
+	Device_Info.req = S0.req;
 	Device_Info.vals.w = CHANGE_END16(S0.vals.w);
 	Device_Info.inds.w = CHANGE_END16(S0.inds.w);
-	Device_Info.lens.w = S0.lens.w; 
+	Device_Info.lens = S0.lens; 
 
 	Device_Info.ControlState = SETTING_UP;
-	if (Device_Info.lens.w == 0)
-	{
-		/* Setup with no data stage */
-		NoData_Setup0();
-	}
-	else
-	{
-		/* Setup with data stage */
-		Data_Setup0();
-	}
+	if (Device_Info.lens == 0) NoData_Setup0();
+	else Data_Setup0();
+
 	return Post0_Process();
 }
 
@@ -795,13 +302,13 @@ u8 In0_Process(void)
 	if ((ControlState == IN_DATA) || (ControlState == LAST_IN_DATA))
 	{
 		DataStageIn();
-		/* ControlState may be changed outside the function */
-		ControlState = Device_Info.ControlState;
+		ControlState = Device_Info.ControlState; //外部可能改变
 	}
-	else if (ControlState == WAIT_STATUS_IN)
+	else if(ControlState == WAIT_STATUS_IN)
 	{
-		if ((Device_Info.USBbRequest == SET_ADDRESS) &&
-				(Type_Recipient == (STANDARD_REQUEST | DEVICE_RECIPIENT)))
+		if((Device_Info.req == SET_ADDRESS) &&
+			(Device_Info.type.s.rx_type==0 && Device_Info.type.s.req_type==0))
+			//标准请求，接收者为设备
 		{
 			SetDeviceAddress(Device_Info.vals.b.b1);
 		}
@@ -814,7 +321,6 @@ u8 In0_Process(void)
 	Device_Info.ControlState = ControlState;
 	return Post0_Process();
 }
-
 /*******************************************************************************
  * Function Name  : Out0_Process
  * Description    : Process the OUT token on all default endpoint.
@@ -828,8 +334,7 @@ u8 Out0_Process(void)
 
 	if ((ControlState == IN_DATA) || (ControlState == LAST_IN_DATA))
 	{
-		/* host aborts the transfer before finish */
-		ControlState = STALLED;
+		ControlState = STALLED; //host关闭传输
 	}
 	else if ((ControlState == OUT_DATA) || (ControlState == LAST_OUT_DATA))
 	{
@@ -840,7 +345,6 @@ u8 Out0_Process(void)
 	{
 		ControlState = STALLED;
 	}
-	/* Unexpect state, STALL the endpoint */
 	else //未定义状态，设置STALL
 	{
 		ControlState = STALLED;

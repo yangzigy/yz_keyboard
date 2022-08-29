@@ -422,13 +422,9 @@ u8 Joystick_StringSerial[JOYSTICK_SIZ_STRING_SERIAL] =
 	'S', 0, 'T', 0, 'M', 0, '3', 0, '2', 0, '1', 0, '0', 0
 };
 
-u32 ProtocolValue;
-
 DEVICE_PROP Device_Property =
 {
 	Joystick_Data_Setup,
-	Joystick_NoData_Setup,
-	Joystick_Get_Interface_Setting,
 	Joystick_GetDeviceDescriptor,
 	Joystick_GetConfigDescriptor,
 	Joystick_GetStringDescriptor,
@@ -480,13 +476,6 @@ ONE_DESCRIPTOR String_Descriptor[4] =
 };
 void Joystick_Reset(void)
 {
-	/* Set Joystick_DEVICE as not configured */
-	Device_Info.Current_Configuration = 0;
-	Device_Info.Current_Interface = 0;/*the default Interface*/
-
-	/* Current Feature initialization */
-	Device_Info.Current_Feature = Joystick_ConfigDescriptor[7];
-
 	USB->BTABLE =0;
 
 	//设置端点0
@@ -534,7 +523,7 @@ RESULT Joystick_Data_Setup(u8 RequestNo)
 
 	CopyRoutine = 0;
 	if ((RequestNo == GET_DESCRIPTOR)
-			&& (Type_Recipient == (STANDARD_REQUEST | INTERFACE_RECIPIENT))
+			&& (Device_Info.type.s.rx_type==1 && Device_Info.type.s.req_type==0) //标准请求，接收者为接口
 			&& (Device_Info.inds.b.b1 < 2))
 	{
 		if (Device_Info.vals.b.b0 == REPORT_DESCRIPTOR)
@@ -552,40 +541,12 @@ RESULT Joystick_Data_Setup(u8 RequestNo)
 				CopyRoutine = Mouse_GetHIDDescriptor;
 		}
 	}
-	/*** GET_PROTOCOL ***/
-	else if ((Type_Recipient == (CLASS_REQUEST | INTERFACE_RECIPIENT))
-			&& RequestNo == GET_PROTOCOL)
-	{
-		CopyRoutine = Joystick_GetProtocolValue;
-	}
-	if (CopyRoutine == 0)
-	{
-		return USB_UNSUPPORT;
-	}
+	if (CopyRoutine == 0) return USB_UNSUPPORT;
 
 	Device_Info.Ctrl_Info.CopyData = CopyRoutine; //设置好之后的回调
 	Device_Info.Ctrl_Info.Usb_wOffset = 0; //设置初始偏置为0
 	(*CopyRoutine)(0); //设置len为0
 	return USB_SUCCESS;
-}
-/*******************************************************************************
- * Function Name  : Joystick_NoData_Setup
- * Description    : handle the no data class specific requests
- * Input          : Request Nb.
- * Output         : None.
- * Return         : USB_UNSUPPORT or USB_SUCCESS.
- *******************************************************************************/
-RESULT Joystick_NoData_Setup(u8 RequestNo)
-{
-	if ((Type_Recipient == (CLASS_REQUEST | INTERFACE_RECIPIENT))
-			&& (RequestNo == SET_PROTOCOL))
-	{
-		return Joystick_SetProtocol();
-	}
-	else
-	{
-		return USB_UNSUPPORT;
-	}
 }
 /*******************************************************************************
  * Function Name  : Joystick_GetDeviceDescriptor.
@@ -598,7 +559,6 @@ u8 *Joystick_GetDeviceDescriptor(u16 Length)
 {
 	return Standard_GetDescriptorData(Length, &Device_Descriptor);
 }
-
 /*******************************************************************************
  * Function Name  : Joystick_GetConfigDescriptor.
  * Description    : Gets the configuration descriptor.
@@ -610,7 +570,6 @@ u8 *Joystick_GetConfigDescriptor(u16 Length)
 {
 	return Standard_GetDescriptorData(Length, &Config_Descriptor);
 }
-
 /*******************************************************************************
  * Function Name  : Joystick_GetStringDescriptor
  * Description    : Gets the string descriptors according to the needed index
@@ -623,7 +582,6 @@ u8 *Joystick_GetStringDescriptor(u16 Length)
 	u8 wValue0 = Device_Info.vals.b.b1;
 	return Standard_GetDescriptorData(Length, &String_Descriptor[wValue0]);
 }
-u8 INIT_OK = 0;
 /*******************************************************************************
  * Function Name  : Joystick_GetReportDescriptor.
  * Description    : Gets the HID report descriptor.
@@ -635,13 +593,10 @@ u8 *KP_GetReportDescriptor(u16 Length)
 {
 	return Standard_GetDescriptorData(Length, &KP_Report_Descriptor);
 }
-
 u8 *Mouse_GetReportDescriptor(u16 Length)
 {
-	INIT_OK = 1;
 	return Standard_GetDescriptorData(Length, &Mouse_Report_Descriptor);
 }
-
 /*******************************************************************************
  * Function Name  : Joystick_GetHIDDescriptor.
  * Description    : Gets the HID descriptor.
@@ -656,62 +611,6 @@ u8 *KP_GetHIDDescriptor(u16 Length)
 u8 *Mouse_GetHIDDescriptor(u16 Length)
 {
 	return Standard_GetDescriptorData(Length, &Mouse_Hid_Descriptor);
-}
-
-/*******************************************************************************
- * Function Name  : Joystick_Get_Interface_Setting.
- * Description    : tests the interface and the alternate setting according to the
- *                  supported one.
- * Input          : - Interface : interface number.
- *                  - AlternateSetting : Alternate Setting number.
- * Output         : None.
- * Return         : USB_SUCCESS or USB_UNSUPPORT.
- *******************************************************************************/
-RESULT Joystick_Get_Interface_Setting(u8 Interface, u8 AlternateSetting)
-{
-	if (AlternateSetting > 0)
-	{
-		return USB_UNSUPPORT;
-	}
-	else if (Interface > 0)
-	{
-		return USB_UNSUPPORT;
-	}
-	return USB_SUCCESS;
-}
-
-/*******************************************************************************
- * Function Name  : Joystick_SetProtocol
- * Description    : Joystick Set Protocol request routine.
- * Input          : None.
- * Output         : None.
- * Return         : USB SUCCESS.
- *******************************************************************************/
-RESULT Joystick_SetProtocol(void)
-{
-	u8 wValue0 = Device_Info.vals.b.b1;
-	ProtocolValue = wValue0;
-	return USB_SUCCESS;
-}
-
-/*******************************************************************************
- * Function Name  : Joystick_GetProtocolValue
- * Description    : get the protocol value
- * Input          : Length.
- * Output         : None.
- * Return         : address of the protcol value.
- *******************************************************************************/
-u8 *Joystick_GetProtocolValue(u16 Length)
-{
-	if (Length == 0)
-	{
-		Device_Info.Ctrl_Info.Usb_wLength = 1;
-		return 0;
-	}
-	else
-	{
-		return (u8 *)(&ProtocolValue);
-	}
 }
 
 vu32 EP[8];
@@ -747,7 +646,6 @@ void Suspend(void)
 
 	Enter_LowPowerMode();
 }
-
 /*******************************************************************************
  * Function Name  : Resume_Init
  * Description    : Handles wake-up restoring normal operations
@@ -771,7 +669,6 @@ void Resume_Init(void)
 	USB->CNTR=CNTR_CTRM  | CNTR_WKUPM | CNTR_SUSPM | CNTR_ERRM  | CNTR_SOFM | CNTR_ESOFM | CNTR_RESETM;
 	/* reverse suspend preparation */
 }
-
 /*******************************************************************************
  * Function Name  : Resume
  * Description    : This is the state machine handling resume operations and
@@ -840,7 +737,6 @@ void Resume(RESUME_STATE eResumeSetVal)
 		break;
 	}
 }
-
 void usb_ini(void)
 {
 	MGPIOA->CT8=GPIO_OUT_PP; //USB线的使能引脚
@@ -868,7 +764,6 @@ void usb_ini(void)
 	Joystick_StringSerial[22] = (u8)((t2 & 0x00FF0000) >> 16);
 	Joystick_StringSerial[24] = (u8)((t2 & 0xFF000000) >> 24);
 
-	Device_Info.Current_Configuration = 0;
 	/* Connect the device */
 	USB->CNTR=1; //重启
 	USB->CNTR=0;
