@@ -261,8 +261,7 @@ const u8 Joystick_StringLangID[JOYSTICK_SIZ_STRING_LANGID] =
 	3, //USB_STRING_DESCRIPTOR_TYPE,字符串描述符类型
 	0x09,
 	0x04
-}
-; // LangID = 0x0409: U.S. English */
+}; // LangID = 0x0409: U.S. English */
 
 const u8 Joystick_StringVendor[JOYSTICK_SIZ_STRING_VENDOR] =
 {
@@ -288,58 +287,6 @@ u8 Joystick_StringSerial[JOYSTICK_SIZ_STRING_SERIAL] =
 	'S', 0, 'T', 0, 'M', 0, '3', 0, '2', 0, '1', 0, '0', 0
 };
 
-DEVICE_PROP Device_Property =
-{
-	Joystick_Data_Setup,
-	Joystick_GetDeviceDescriptor,
-	Joystick_GetConfigDescriptor,
-	Joystick_GetStringDescriptor,
-};
-
-ONE_DESCRIPTOR Device_Descriptor =
-{
-	(u8*)Joystick_DeviceDescriptor,
-	JOYSTICK_SIZ_DEVICE_DESC
-};
-
-ONE_DESCRIPTOR Config_Descriptor =
-{
-	(u8*)Joystick_ConfigDescriptor,
-	JOYSTICK_SIZ_CONFIG_DESC
-};
-/*******************************************************************/
-ONE_DESCRIPTOR KP_Report_Descriptor =							   	//
-{																	//
-	(u8 *)KeyboardReportDescriptor,									//
-	KP_ReportDescriptor_Size										//
-};																//
-//
-ONE_DESCRIPTOR KP_Hid_Descriptor =									//
-{																	//
-	(u8*)Joystick_ConfigDescriptor + KP_OFF_HID_DESC,				//
-	JOYSTICK_SIZ_HID_DESC											//
-};																//
-//
-ONE_DESCRIPTOR Mouse_Report_Descriptor =							//
-{																	//
-	(u8 *)MouseReportDescriptor,									//
-	Mouse_ReportDescriptor_Size										//
-};																//
-//
-ONE_DESCRIPTOR Mouse_Hid_Descriptor =								//
-{																	//
-	(u8*)Joystick_ConfigDescriptor + Mouse_OFF_HID_DESC,			//
-	JOYSTICK_SIZ_HID_DESC											//
-};																//
-/*******************************************************************/
-
-ONE_DESCRIPTOR String_Descriptor[4] =
-{
-	{(u8*)Joystick_StringLangID, JOYSTICK_SIZ_STRING_LANGID},
-	{(u8*)Joystick_StringVendor, JOYSTICK_SIZ_STRING_VENDOR},
-	{(u8*)Joystick_StringProduct, JOYSTICK_SIZ_STRING_PRODUCT},
-	{(u8*)Joystick_StringSerial, JOYSTICK_SIZ_STRING_SERIAL}
-};
 void Joystick_Reset(void)
 {
 	USB->BTABLE =0;
@@ -351,7 +298,7 @@ void Joystick_Reset(void)
 	USB_BT[0].ADDR_TX = ENDP0_TXADDR;
 	USB_EP(0)= EPREG_1_SET | //写1无效的位
 			(USB_EP(0) & (EPREG_MASK & (~(1<<8)))); //清除KIND
-	SetEPRxCount(0, MaxPacketSize);
+	SetEPRxCount(0, MaxPacketSize); //设置接收缓存大小
 	SetEPRxStatus(0, 3<<12); //RX_VALID
 
 	//设置端点1的 In 方向
@@ -375,69 +322,94 @@ void Joystick_Reset(void)
 
 	SetDeviceAddress(0); //设置默认地址
 }
-RESULT Joystick_Data_Setup(u8 RequestNo)
+RESULT Joystick_Data_Setup(void) //setup的处理，输入请求类型
 {
-	u8 *(*CopyRoutine)(u16);
-
-	CopyRoutine = 0;
-	if ((RequestNo == GET_DESCRIPTOR)
-			&& (Device_Info.type.s.rx_type==1 && Device_Info.type.s.req_type==0) //标准请求，接收者为接口
-			&& (Device_Info.inds.b.b1 < 2))
+	if(Device_Info.req != GET_DESCRIPTOR || //不是获取描述符或不是标准请求
+		Device_Info.type.s.req_type!=0) return USB_UNSUPPORT;
+	if(Device_Info.type.s.rx_type==0) //接收者为设备
+	{
+		u8 wValue1 = Device_Info.vals.b.b0;
+		if (wValue1 == DEVICE_DESCRIPTOR)
+		{
+			p0_p=(u8*)Joystick_DeviceDescriptor;
+			p0_len=sizeof(Joystick_DeviceDescriptor);
+			return USB_SUCCESS;
+		}
+		else if (wValue1 == CONFIG_DESCRIPTOR)
+		{
+			p0_p=(u8*)Joystick_ConfigDescriptor;
+			p0_len=sizeof(Joystick_ConfigDescriptor);
+			return USB_SUCCESS;
+		}
+		else if (wValue1 == STRING_DESCRIPTOR)
+		{
+			switch(Device_Info.vals.b.b1)
+			{
+			case 0:
+				p0_p=(u8*)Joystick_StringLangID;
+				p0_len=sizeof(Joystick_StringLangID);
+				break;
+			case 1:
+				p0_p=(u8*)Joystick_StringVendor;
+				p0_len=sizeof(Joystick_StringVendor);
+				break;
+			case 2:
+				p0_p=(u8*)Joystick_StringProduct;
+				p0_len=sizeof(Joystick_StringProduct);
+				break;
+			case 3:
+				p0_p=(u8*)Joystick_StringSerial;
+				p0_len=sizeof(Joystick_StringSerial);
+				break;
+			default: return USB_UNSUPPORT;
+			}
+			return USB_SUCCESS;
+		}
+	}
+	else if(Device_Info.type.s.rx_type==1 && Device_Info.inds.b.b1 < 2) //接收者为接口
 	{
 		if (Device_Info.vals.b.b0 == REPORT_DESCRIPTOR)
 		{
 			if (Device_Info.inds.b.b1 == 0)
-				CopyRoutine = KP_GetReportDescriptor;
+			{
+				//发送:给指针、长度赋值，返回正确即可
+				p0_p=(u8*)KeyboardReportDescriptor;
+				p0_len=sizeof(KeyboardReportDescriptor);
+				return USB_SUCCESS;
+			}
 			else
-				CopyRoutine = Mouse_GetReportDescriptor;
+			{
+				//发送:给指针、长度赋值，返回正确即可
+				p0_p=(u8*)MouseReportDescriptor;
+				p0_len=sizeof(MouseReportDescriptor);
+				return USB_SUCCESS;
+			}
 		}
 		else if (Device_Info.vals.b.b0 == HID_DESCRIPTOR_TYPE)
 		{
 			if (Device_Info.inds.b.b1 == 0)
-				CopyRoutine = KP_GetHIDDescriptor;
+			{
+				//发送:给指针、长度赋值，返回正确即可
+				p0_p=(u8*)Joystick_ConfigDescriptor + KP_OFF_HID_DESC;
+				p0_len=JOYSTICK_SIZ_HID_DESC;
+				return USB_SUCCESS;
+			}
 			else
-				CopyRoutine = Mouse_GetHIDDescriptor;
+			{
+				//发送:给指针、长度赋值，返回正确即可
+				p0_p=(u8*)Joystick_ConfigDescriptor + Mouse_OFF_HID_DESC;
+				p0_len=JOYSTICK_SIZ_HID_DESC;
+				return USB_SUCCESS;
+			}
 		}
 	}
-	if (CopyRoutine == 0) return USB_UNSUPPORT;
-
-	Device_Info.Ctrl_Info.CopyData = CopyRoutine; //设置好之后的回调
-	Device_Info.Ctrl_Info.Usb_wOffset = 0; //设置初始偏置为0
-	(*CopyRoutine)(0); //设置len为0
-	return USB_SUCCESS;
-}
-u8 *Joystick_GetDeviceDescriptor(u16 Length)
-{
-	return Standard_GetDescriptorData(Length, &Device_Descriptor);
-}
-u8 *Joystick_GetConfigDescriptor(u16 Length)
-{
-	return Standard_GetDescriptorData(Length, &Config_Descriptor);
-}
-u8 *Joystick_GetStringDescriptor(u16 Length)
-{
-	u8 wValue0 = Device_Info.vals.b.b1;
-	return Standard_GetDescriptorData(Length, &String_Descriptor[wValue0]);
-}
-u8 *KP_GetReportDescriptor(u16 Length)
-{
-	return Standard_GetDescriptorData(Length, &KP_Report_Descriptor);
-}
-u8 *Mouse_GetReportDescriptor(u16 Length)
-{
-	return Standard_GetDescriptorData(Length, &Mouse_Report_Descriptor);
-}
-u8 *KP_GetHIDDescriptor(u16 Length)
-{
-	return Standard_GetDescriptorData(Length, &KP_Hid_Descriptor);
-}
-u8 *Mouse_GetHIDDescriptor(u16 Length)
-{
-	return Standard_GetDescriptorData(Length, &Mouse_Hid_Descriptor);
+	return USB_UNSUPPORT;
 }
 
 void usb_ini(void)
 {
+	Class_Data_Setup=Joystick_Data_Setup;
+
 	MGPIOA->CT8=GPIO_OUT_PP; //USB线的使能引脚
 	EP_num=3; //总共多少个端点
 	usb_hal_ini(); //初始化硬件

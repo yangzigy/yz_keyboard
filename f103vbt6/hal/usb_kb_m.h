@@ -37,7 +37,6 @@ void Joystick_Reset(void);
 void Joystick_SetConfiguration(void);
 void Joystick_Status_In (void);
 void Joystick_Status_Out (void);
-RESULT Joystick_Data_Setup(u8);
 RESULT Joystick_NoData_Setup(u8);
 u8 *Joystick_GetDeviceDescriptor(u16 );
 u8 *Joystick_GetConfigDescriptor(u16);
@@ -47,20 +46,8 @@ u8 *Joystick_GetProtocolValue(u16 Length);
 RESULT Joystick_SetProtocol(void);
 u8 *Joystick_GetReportDescriptor(u16 Length);
 u8 *Joystick_GetHIDDescriptor(u16 Length);
-/***********************************************/
-u8 *Mouse_GetReportDescriptor(u16 Length);
-u8 *KP_GetReportDescriptor(u16 Length);
-u8 *Mouse_GetHIDDescriptor(u16 Length);
-u8 *KP_GetHIDDescriptor(u16 Length);
-/***********************************************/
 
 #define REPORT_DESCRIPTOR                  0x22
-
-//#define USB_DEVICE_DESCRIPTOR_TYPE              0x01//设备描述符类型．固定为0x01
-//#define USB_CONFIGURATION_DESCRIPTOR_TYPE       0x02//配置描述符类型．固定为0x02
-//#define USB_STRING_DESCRIPTOR_TYPE              0x03
-//#define USB_INTERFACE_DESCRIPTOR_TYPE           0x04
-//#define USB_ENDPOINT_DESCRIPTOR_TYPE            0x05
 
 #define HID_DESCRIPTOR_TYPE                     0x21
 #define JOYSTICK_SIZ_HID_DESC                   0x09

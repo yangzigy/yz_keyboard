@@ -68,7 +68,6 @@ typedef struct
 	   */
 	u16  Usb_wLength; //Usb_wLength 剩余发送数
 	u16  Usb_wOffset; //发送时的分批发送的位置
-	u16  PacketSize;
 	u8   *(*CopyData)(u16 Length); //len为0时准备数据总数
 }ENDPOINT_INFO;
 
@@ -139,8 +138,6 @@ typedef struct
 
 typedef struct _DEVICE_PROP
 {
-	RESULT (*Class_Data_Setup)(u8 RequestNo);
-
 	u8* (*GetDeviceDescriptor)(u16 Length);
 	u8* (*GetConfigDescriptor)(u16 Length);
 	u8* (*GetStringDescriptor)(u16 Length);
@@ -157,12 +154,13 @@ void SetDeviceAddress(u8);
 void NOP_Process(void);
 
 extern u8 MaxPacketSize;
-extern DEVICE_PROP Device_Property;
 extern DEVICE_INFO Device_Info;
+extern RESULT (*Class_Data_Setup)(void); //setup的处理回调函数
 
-/* cells saving status during interrupt servicing */
-extern vu16 SaveRState;
-extern vu16 SaveTState;
+
+extern u16 p0_len; //剩余发送数
+extern u16 p0_ind; //发送时的分批发送的位置
+extern u8 *p0_p; //收发指针
 
 #endif
 

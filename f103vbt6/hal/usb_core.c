@@ -8,10 +8,20 @@ DEVICE_STATE usb_stat=USB_UNCONNECTED; //usb设备状态，失去连接时要更
 S_USB_CTRL_STATE usb_ctrl_stat=IN_DATA; //usb控制状态
 DEVICE_INFO	Device_Info;
 
-int Data_Mul_MaxPacketSize = 0;
+RESULT (*Class_Data_Setup)(void)=0; //setup的处理回调函数
+
+//数据收发的长度和位置
+u16 p0_len=0; //剩余发送数
+u16 p0_ind=0; //发送时的分批发送的位置
+u8 *p0_p=0; //收发指针
+
+//由于中断处理的时候需要设置NAK，所以要保存之前的状态
+static vu16 rx_stat; //是接收中断与处理函数关于最后端点0状态的接口
+static vu16 tx_stat; //是接收中断与处理函数关于最后端点0状态的接口
+
+static int need_send_void = 0; //大于等于最大包数，且是整数包，需要发送空包
 /* Private function prototypes -----------------------------------------------*/
-static void DataStageOut(void);
-static void DataStageIn(void);
+static void p0_send_poll(void);
 static void Data_Setup0(void);
 
 /*******************************************************************************
@@ -37,189 +47,59 @@ u8 *Standard_GetDescriptorData(u16 Length, ONE_DESCRIPTOR *pDesc)
 {
 	if (Length == 0)
 	{
-		Device_Info.Ctrl_Info.Usb_wLength = pDesc->Descriptor_Size - Device_Info.Ctrl_Info.Usb_wOffset;
+		p0_len = pDesc->Descriptor_Size - p0_ind;
 		return 0;
 	}
-	return pDesc->Descriptor + Device_Info.Ctrl_Info.Usb_wOffset;
+	return pDesc->Descriptor + p0_ind;
 }
-
-/*******************************************************************************
- * Function Name  : DataStageOut.
- * Description    : Data stage of a Control Write Transfer.
- * Input          : None.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void DataStageOut(void)
-{
-	u32 save_rLength;
-	save_rLength = Device_Info.Ctrl_Info.Usb_wLength;
-	if (Device_Info.Ctrl_Info.CopyData && save_rLength)
-	{
-		u8 *Buffer;
-		u32 Length;
-
-		Length = Device_Info.Ctrl_Info.PacketSize; //总数据长度
-		if (Length > save_rLength)
-		{
-			Length = save_rLength;
-		}
-
-		Buffer = (Device_Info.Ctrl_Info.CopyData)(Length);
-		Device_Info.Ctrl_Info.Usb_wLength -= Length;
-		Device_Info.Ctrl_Info.Usb_wOffset += Length;
-		PMAToUserBufferCopy(Buffer, USB_BT[0].ADDR_RX, Length);
-	}
-
-	if (Device_Info.Ctrl_Info.Usb_wLength != 0)
-	{
-		SaveRState=EP_RX_VALID;/* re-enable for next data reception */
-		USB_BT[0].COUNT_TX = 0;
-		SaveTState=EP_TX_VALID;/* Expect the host to abort the data OUT stage */
-	}
-	/* Set the next State*/
-	if (Device_Info.Ctrl_Info.Usb_wLength >= Device_Info.Ctrl_Info.PacketSize)
-	{
-		usb_ctrl_stat = OUT_DATA;
-	}
-	else
-	{
-		if (Device_Info.Ctrl_Info.Usb_wLength > 0)
-		{
-			usb_ctrl_stat = LAST_OUT_DATA;
-		}
-		else if (Device_Info.Ctrl_Info.Usb_wLength == 0)
-		{
-			usb_ctrl_stat = WAIT_STATUS_IN;
-			//USB_StatusIn();
-			USB_BT[0].COUNT_TX = 0;
-			SaveTState=EP_TX_VALID; 
-		}
-	}
-}
-void DataStageIn(void) //控制端点的发送数据 
+static void p0_send_poll(void) //控制端点的发送数据 
 {
 	u8 *DataBuffer;
 	u32 Length;
 
-	if ((Device_Info.Ctrl_Info.Usb_wLength == 0) && (usb_ctrl_stat == LAST_IN_DATA)) //如果是最后一包
+	if((p0_len == 0) && (usb_ctrl_stat == LAST_IN_DATA)) //如果是最后一包
 	{
-		if(Data_Mul_MaxPacketSize) //没有数据，发送空包
+		if(need_send_void) //大于等于最大包数，且是整数包，发送空包
 		{
 			USB_BT[0].COUNT_TX = 0;
-			SaveTState=EP_TX_VALID; 
-
-			usb_ctrl_stat = LAST_IN_DATA;
-			Data_Mul_MaxPacketSize = 0;
+			tx_stat=EP_TX_VALID; 
+			need_send_void = 0;
+			//SetEPTxStatus(0,EP_TX_VALID); //恢复收发状态
 		}
 		else //没有数据了
 		{
 			usb_ctrl_stat = WAIT_STATUS_OUT;
-			SaveTState=(1<<4); //TX_STALL
+			tx_stat=(1<<4); //TX_STALL
+			//SetEPTxStatus(0,EP_TX_STALL); //恢复收发状态
 		}
+		p0_p=0; //恢复指针
+		//SetEPRxStatus(0,EP_RX_VALID); //加上这句就不对了
 		return ;
 	}
-	Length = Device_Info.Ctrl_Info.PacketSize; //按全长赋值
-	usb_ctrl_stat = (Device_Info.Ctrl_Info.Usb_wLength <= Length) ? LAST_IN_DATA : IN_DATA; //确定是否是最后一包
+	Length = MaxPacketSize; //先假设发最大包长
+	usb_ctrl_stat = (p0_len <= Length) ? LAST_IN_DATA : IN_DATA; //是否是最后一包
 
-	if (Length > Device_Info.Ctrl_Info.Usb_wLength) Length = Device_Info.Ctrl_Info.Usb_wLength;
-	DataBuffer = (Device_Info.Ctrl_Info.CopyData)(Length); //调用发送回调，准备数据
+	if (Length > p0_len) Length = p0_len; //发送不超过包长
 
-	UserToPMABufferCopy(DataBuffer, USB_BT[0].ADDR_TX, Length);
+	if(p0_p) //若是测试
+	{
+		UserToPMABufferCopy(p0_p, USB_BT[0].ADDR_TX, Length);
+		USB_BT[0].COUNT_TX = Length;
+		p0_len -= Length;
+		p0_p+=Length;
+	}
+	else //
+	{
+		DataBuffer = (Device_Info.Ctrl_Info.CopyData)(Length); //调用发送回调，准备数据
+		UserToPMABufferCopy(DataBuffer, USB_BT[0].ADDR_TX, Length);
+		USB_BT[0].COUNT_TX = Length;
+		p0_len -= Length;
+		p0_ind += Length;
+	}
 
-	USB_BT[0].COUNT_TX = Length;
-
-	Device_Info.Ctrl_Info.Usb_wLength -= Length;
-	Device_Info.Ctrl_Info.Usb_wOffset += Length;
-	SaveTState=EP_TX_VALID;
-
-	SaveRState = EP_RX_VALID; //USB_StatusOut//期望host退出data IN
-}
-/*******************************************************************************
- * Function Name  : Data_Setup0.
- * Description    : Proceed the processing of setup request with data stage.
- * Input          : None.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void Data_Setup0(void)
-{
-	u8 *(*CopyRoutine)(u16)=0;
-	RESULT r;
-	if (Device_Info.req == GET_DESCRIPTOR) //获取描述符
-	{
-		if(Device_Info.type.s.rx_type==0 && Device_Info.type.s.req_type==0) //标准请求，接收者为设备
-		{ //这个函数必须是进这三个之一，否则后边就没意义
-			u8 wValue1 = Device_Info.vals.b.b0;
-			if (wValue1 == DEVICE_DESCRIPTOR)
-			{
-				CopyRoutine = Device_Property.GetDeviceDescriptor;
-			}
-			else if (wValue1 == CONFIG_DESCRIPTOR)
-			{
-				CopyRoutine = Device_Property.GetConfigDescriptor;
-			}
-			else if (wValue1 == STRING_DESCRIPTOR)
-			{
-				CopyRoutine = Device_Property.GetStringDescriptor;
-			}
-		}
-	}
-	if (CopyRoutine)
-	{
-		Device_Info.Ctrl_Info.Usb_wOffset = 0;
-		Device_Info.Ctrl_Info.CopyData = CopyRoutine;
-		/* sb in the original the cast to word was directly */
-		/* now the cast is made step by step */
-		(*CopyRoutine)(0);
-		r = USB_SUCCESS;
-	}
-	else
-	{
-		r = (Device_Property.Class_Data_Setup)(Device_Info.req); //调用设备的处理
-		if (r == USB_NOT_READY)
-		{
-			usb_ctrl_stat = PAUSE;
-			return;
-		}
-	}
-	if (Device_Info.Ctrl_Info.Usb_wLength == 0xFFFF)
-	{
-		usb_ctrl_stat = PAUSE; //等数据准备好
-		return;
-	}
-	if ((r == USB_UNSUPPORT) || (Device_Info.Ctrl_Info.Usb_wLength == 0))
-	{ //不支持的操作
-		usb_ctrl_stat = STALLED;
-		return;
-	}
-	if(Device_Info.type.s.dir) //1设备到主机
-	{
-		/* Restrict the data length to be the one host asks for */
-		if (Device_Info.Ctrl_Info.Usb_wLength > Device_Info.lens)
-		{
-			Device_Info.Ctrl_Info.Usb_wLength = Device_Info.lens;
-		}
-		else if (Device_Info.Ctrl_Info.Usb_wLength < Device_Info.lens)
-		{
-			if (Device_Info.Ctrl_Info.Usb_wLength < MaxPacketSize)
-			{
-				Data_Mul_MaxPacketSize = 0;
-			}
-			else if ((Device_Info.Ctrl_Info.Usb_wLength % MaxPacketSize) == 0)
-			{
-				Data_Mul_MaxPacketSize = 1;
-			}
-		}   
-		Device_Info.Ctrl_Info.PacketSize = MaxPacketSize;
-		DataStageIn();
-	}
-	else //0主机到设备
-	{
-		usb_ctrl_stat = OUT_DATA;
-		SaveRState=EP_RX_VALID; /* enable for next data reception */
-	}
-	return;
+	tx_stat=EP_TX_VALID;
+	rx_stat = EP_RX_VALID; //USB_StatusOut//期望host退出data IN
+	//SetEPRxTxStatus(0,EP_RX_VALID,EP_TX_VALID); //恢复收发状态
 }
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -227,36 +107,69 @@ void Data_Setup0(void)
 //端点0的接收缓存，换算成CPU的32bit地址
 //看做SETUP0的接收结构
 #define S0 (*(S_SETUP0_RX*)(PMAAddr + (u8 *)(USB_BT[0].ADDR_RX * 2))) 
-void Setup0_Process(void)
+void Setup0_Process(void) //接收到setup后的data0，放在端点0的接收缓存，处理
 {
+	//将接收缓存中的数据复制到CPU区域的变量中
 	Device_Info.type.b = S0.type;
 	Device_Info.req = S0.req;
 	Device_Info.vals.w = CHANGE_END16(S0.vals.w);
 	Device_Info.inds.w = CHANGE_END16(S0.inds.w);
-	Device_Info.lens = S0.lens; 
+	Device_Info.lens = S0.lens;
 
-	usb_ctrl_stat = SETTING_UP;
-	if (Device_Info.lens == 0)
+	usb_ctrl_stat = SETTING_UP; //接收到setup
+	if(Device_Info.lens == 0) //长度为0，不发东西
 	{
 		//USB_StatusIn
 		USB_BT[0].COUNT_TX = 0;
-		SaveTState=EP_TX_VALID;
+		tx_stat=EP_TX_VALID;
 		usb_ctrl_stat = WAIT_STATUS_IN;
 	}
-	else Data_Setup0();
-
-	SetEPRxCount(0, MaxPacketSize);
+	else
+	{
+		RESULT r;
+		r = Class_Data_Setup(); //调用设备的处理
+		if (r == USB_NOT_READY)
+		{
+			usb_ctrl_stat = PAUSE;
+			goto END;
+		}
+		if ((r == USB_UNSUPPORT) || (p0_len == 0))
+		{ //不支持的操作
+			usb_ctrl_stat = STALLED;
+			goto END;
+		}
+		if(Device_Info.type.s.dir) //1设备到主机
+		{
+			if (p0_len > Device_Info.lens) //若比主机请求的还长，按主机的
+			{
+				p0_len = Device_Info.lens;
+			}
+			need_send_void = 0;
+			if (p0_len >= MaxPacketSize &&
+				(p0_len % MaxPacketSize) == 0) //大于等于最大包数，且是整数包
+			{
+				need_send_void = 1;
+			}
+			p0_send_poll();
+		}
+		else //0主机到设备
+		{
+			usb_ctrl_stat = OUT_DATA;
+			rx_stat=EP_RX_VALID; /* enable for next data reception */
+		}
+	}
+END:
 	if (usb_ctrl_stat == STALLED)
 	{
-		SaveRState=(1<<12);
-		SaveTState=(1<<4); //STALL
+		rx_stat=(1<<12);
+		tx_stat=(1<<4); //STALL
 	}
 }
-void In0_Process(void)
+void In0_Process(void) //收发状态的接口要用
 {
 	if ((usb_ctrl_stat == IN_DATA) || (usb_ctrl_stat == LAST_IN_DATA))
 	{
-		DataStageIn();
+		p0_send_poll();
 	}
 	else if(usb_ctrl_stat == WAIT_STATUS_IN)
 	{
@@ -268,32 +181,72 @@ void In0_Process(void)
 		}
 		usb_ctrl_stat = STALLED;
 	}
-	else
-	{
-		usb_ctrl_stat = STALLED;
-	}
-	SetEPRxCount(0, MaxPacketSize);
+	else usb_ctrl_stat = STALLED;
 	if (usb_ctrl_stat == STALLED)
 	{
-		SaveRState=(1<<12);
-		SaveTState=(1<<4); //STALL
+		rx_stat=(1<<12);
+		tx_stat=(1<<4); //STALL
+		//SetEPRxTxStatus(0,EP_RX_STALL,EP_TX_STALL); //恢复收发状态
 	}
+	//else SetEPRxStatus(0,EP_RX_VALID); //加上这句就不对了
 }
 void Out0_Process(void)
 {
 	if ((usb_ctrl_stat == OUT_DATA) || (usb_ctrl_stat == LAST_OUT_DATA))
 	{
-		DataStageOut();
+		u32 save_rLength;
+		save_rLength = p0_len;
+		if (Device_Info.Ctrl_Info.CopyData && save_rLength)
+		{
+			u8 *Buffer;
+			u32 Length;
+
+			Length = MaxPacketSize; //总数据长度
+			if (Length > save_rLength)
+			{
+				Length = save_rLength;
+			}
+
+			Buffer = (Device_Info.Ctrl_Info.CopyData)(Length);
+			p0_len -= Length;
+			p0_ind += Length;
+			PMAToUserBufferCopy(Buffer, USB_BT[0].ADDR_RX, Length);
+		}
+
+		if (p0_len != 0)
+		{
+			rx_stat=EP_RX_VALID;/* re-enable for next data reception */
+			USB_BT[0].COUNT_TX = 0;
+			tx_stat=EP_TX_VALID;/* Expect the host to abort the data OUT stage */
+		}
+		/* Set the next State*/
+		if (p0_len >= MaxPacketSize)
+		{
+			usb_ctrl_stat = OUT_DATA;
+		}
+		else
+		{
+			if (p0_len > 0)
+			{
+				usb_ctrl_stat = LAST_OUT_DATA;
+			}
+			else if (p0_len == 0)
+			{
+				usb_ctrl_stat = WAIT_STATUS_IN;
+				//USB_StatusIn();
+				USB_BT[0].COUNT_TX = 0;
+				tx_stat=EP_TX_VALID; 
+			}
+		}
 	}
 	else //未定义状态，设置STALL
 	{
 		usb_ctrl_stat = STALLED;
 	}
-	SetEPRxCount(0, MaxPacketSize);
 	if (usb_ctrl_stat == STALLED)
 	{
-		SaveRState=(1<<12);
-		SaveTState=(1<<4); //STALL
+		rx_stat=(1<<12);
+		tx_stat=(1<<4); //STALL
 	}
 }
 void SetDeviceAddress(u8 Val) //设置设备地址和端点地址
@@ -314,9 +267,6 @@ void NOP_Process(void)
 ///////////////////////////////////////////////////////////////////////////////
 //					中断部分
 ///////////////////////////////////////////////////////////////////////////////
-vu16 SaveRState; //是接收中断与处理函数关于最后端点0状态的接口
-vu16 SaveTState; //是接收中断与处理函数关于最后端点0状态的接口
-
 extern void (*pEpInt_OUT[7])(void); //端点0没有
 extern void (*pEpInt_IN[7])(void); //端点0没有
 extern void Joystick_Reset(void);
@@ -357,44 +307,33 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 			u32 port = t & 0x0f; //最高优先级端点
 			if (port == 0) //0端点的处理
 			{
-				// save RX & TX status  and set both to NAK 
-				SaveRState = USB_EP(0);
-				SaveTState = SaveRState & EPTX_STAT;
-				SaveRState &=  EPRX_STAT;	
-				SetEPRxTxStatus(0,EP_RX_NAK,EP_TX_NAK); //先保存了收发状态，设置成NAK，再恢复
+				rx_stat = USB_EP(0) & EPRX_STAT; //只保存了发送状态，没有其他bit
+				tx_stat = USB_EP(0) & EPTX_STAT;
+				SetEPRxTxStatus(0,EP_RX_NAK,EP_TX_NAK); //必须！！先保存了收发状态，设置成NAK，让主机等待重试，再恢复
 				/* DIR bit = origin of the interrupt */
 				if ((t & (1<<4)) == 0) //DIR 0:IN, 1:OUT
 				{
-					/* DIR = 0      => IN  int */
-					/* DIR = 0 implies that (EP_CTR_TX = 1) always  */
 					USB_EP(0)=USB_EP(0) & (~(1<<7)) & EPREG_MASK; //清除CTR_TX
 					In0_Process();
-					/* before terminate set Tx & Rx status */
-					SetEPRxTxStatus(0,SaveRState,SaveTState);
-					return;
+					//printf("rx: %d -> %d  tx: %d -> %d\n",
+						//rx_stat>>12,(USB_EP(0) & EPRX_STAT)>>12,
+						//tx_stat>>4,(USB_EP(0) & EPTX_STAT)>>4);
 				}
-				else
+				else //1：out
 				{
-					/* DIR = 1 & CTR_RX       => SETUP or OUT int */
-					/* DIR = 1 & (CTR_TX | CTR_RX) => 2 int pending */
 					ep_reg = USB_EP(0);
 					if ((ep_reg & EP_SETUP) != 0)
 					{
 						USB_EP(0)=USB_EP(0) & (~(1<<15)) & EPREG_MASK; //清除CTR_RX
 						Setup0_Process();
-						/* before terminate set Tx & Rx status */
-						SetEPRxTxStatus(0,SaveRState,SaveTState);
-						return;
 					}
 					else if ((ep_reg & (1<<15)) != 0) //CTR_RX正确接收
 					{
 						USB_EP(0)=USB_EP(0) & (~(1<<15)) & EPREG_MASK; //清除CTR_RX
 						Out0_Process();
-						/* before terminate set Tx & Rx status */
-						SetEPRxTxStatus(0,SaveRState,SaveTState);
-						return;
 					}
 				}
+				SetEPRxTxStatus(0,rx_stat,tx_stat); //恢复收发状态
 			}
 			else //非控制端点中断
 			{
