@@ -2,6 +2,8 @@
 #include "usb_core.h"
 #include "usb_kb_m.h"
 
+const u8 KeyboardReportDescriptor[KP_ReportDescriptor_Size];
+const u8 MouseReportDescriptor[Mouse_ReportDescriptor_Size];
 ////////////////////////////////////////////////////////////////////////////
 //				端点输入、输出的回调函数，除了0
 ////////////////////////////////////////////////////////////////////////////
@@ -62,7 +64,7 @@ void mouse_send(u8 *buf)
 
 //设备描述符，配置描述符，字符串描述符，接口描述符，端点描述符
 //USB Standard Device Descriptor设备描述符，只有一个
-const u8 Joystick_DeviceDescriptor[JOYSTICK_SIZ_DEVICE_DESC] =
+const u8 yzkb_DeviceDescriptor[YZKB_SIZ_DEVICE_DESC] =
 {
 	0x12,   //bLength */
 	1,//USB_DEVICE_DESCRIPTOR_TYPE, //设备描述符类型．固定为0x01
@@ -82,15 +84,15 @@ const u8 Joystick_DeviceDescriptor[JOYSTICK_SIZ_DEVICE_DESC] =
 	2,        //Index of string descriptor describing product*/
 	3,        //Index of string descriptor describing the device serial number */
 	0x01      //bNumConfigurations 可能的配置数．指配置字符串的个数
-}; // Joystick_DeviceDescriptor */
+}; // yzkb_DeviceDescriptor */
 
-const u8 Joystick_ConfigDescriptor[JOYSTICK_SIZ_CONFIG_DESC] =
+const u8 yzkb_ConfigDescriptor[YZKB_SIZ_CONFIG_DESC] =
 {
 	//**************配置描述符***********************/
 	0x09,		//bLength字段,描述符大小．固定为0x09
 	2,//USB_CONFIGURATION_DESCRIPTOR_TYPE,	//配置描述符类型．固定为0x02
 	//wTotalLength字段
-	JOYSTICK_SIZ_CONFIG_DESC,//全长．此配置返回的配置描述符，接口描述符以及端点描述符的全部大小
+	YZKB_SIZ_CONFIG_DESC,//全长．此配置返回的配置描述符，接口描述符以及端点描述符的全部大小
 	0x00,
 
 	0x02,	//bNumInterfaces配置所支持的接口数
@@ -217,7 +219,7 @@ const u8 KeyboardReportDescriptor[KP_ReportDescriptor_Size]=
 	0x81, 0x00,  //   INPUT (Data,Ary,Abs)
 	0xc0,         // END_COLLECTION
 	//0xc0,
-}; // Joystick_ReportDescriptor */
+}; // yzkb_ReportDescriptor */
 ///////////////////////////键盘报告描述符完毕////////////////////////////
 
 //USB鼠标报告描述符的定义
@@ -255,17 +257,17 @@ const u8 MouseReportDescriptor[Mouse_ReportDescriptor_Size]=
 };
 ///////////////////////////报告描述符完毕////////////////////////////
 // USB String Descriptors (optional) */
-const u8 Joystick_StringLangID[JOYSTICK_SIZ_STRING_LANGID] =
+const u8 yzkb_StringLangID[YZKB_SIZ_STRING_LANGID] =
 {
-	JOYSTICK_SIZ_STRING_LANGID,
+	YZKB_SIZ_STRING_LANGID,
 	3, //USB_STRING_DESCRIPTOR_TYPE,字符串描述符类型
 	0x09,
 	0x04
 }; // LangID = 0x0409: U.S. English */
 
-const u8 Joystick_StringVendor[JOYSTICK_SIZ_STRING_VENDOR] =
+const u8 yzkb_StringVendor[YZKB_SIZ_STRING_VENDOR] =
 {
-	JOYSTICK_SIZ_STRING_VENDOR, // Size of Vendor string */
+	YZKB_SIZ_STRING_VENDOR, // Size of Vendor string */
 	3, //USB_STRING_DESCRIPTOR_TYPE,字符串描述符类型
 	// Manufacturer: "STMicroelectronics" */
 	'S', 0, 'T', 0, 'M', 0, 'i', 0, 'c', 0, 'r', 0, 'o', 0, 'e', 0,
@@ -273,21 +275,21 @@ const u8 Joystick_StringVendor[JOYSTICK_SIZ_STRING_VENDOR] =
 	'c', 0, 's', 0
 };
 
-const u8 Joystick_StringProduct[JOYSTICK_SIZ_STRING_PRODUCT] =
+const u8 yzkb_StringProduct[YZKB_SIZ_STRING_PRODUCT] =
 {
-	JOYSTICK_SIZ_STRING_PRODUCT,          // bLength */
+	YZKB_SIZ_STRING_PRODUCT,          // bLength */
 	3, //USB_STRING_DESCRIPTOR_TYPE,字符串描述符类型
 	'S', 0, 'T', 0, 'M', 0, '3', 0, '2', 0, ' ', 0, 'J', 0,
 	'o', 0, 'y', 0, 's', 0, 't', 0, 'i', 0, 'c', 0, 'k', 0
 };
-u8 Joystick_StringSerial[JOYSTICK_SIZ_STRING_SERIAL] =
+u8 yzkb_StringSerial[YZKB_SIZ_STRING_SERIAL] =
 {
-	JOYSTICK_SIZ_STRING_SERIAL,           // bLength */
+	YZKB_SIZ_STRING_SERIAL,           // bLength */
 	3, //USB_STRING_DESCRIPTOR_TYPE,字符串描述符类型
 	'S', 0, 'T', 0, 'M', 0, '3', 0, '2', 0, '1', 0, '0', 0
 };
 
-void Joystick_Reset(void)
+void yzkb_reset(void)
 {
 	USB->BTABLE =0;
 
@@ -298,7 +300,7 @@ void Joystick_Reset(void)
 	USB_BT[0].ADDR_TX = ENDP0_TXADDR;
 	USB_EP(0)= EPREG_1_SET | //写1无效的位
 			(USB_EP(0) & (EPREG_MASK & (~(1<<8)))); //清除KIND
-	SetEPRxCount(0, MaxPacketSize); //设置接收缓存大小
+	SetEPRxCount(0, usb_max_packet); //设置接收缓存大小
 	SetEPRxStatus(0, 3<<12); //RX_VALID
 
 	//设置端点1的 In 方向
@@ -318,59 +320,57 @@ void Joystick_Reset(void)
 	USB_BT[2].COUNT_TX = 5; //设置发送的长度
 	SetEPTxStatus(2, EP_TX_NAK); //设置端点处于忙状态
 
-	usb_stat = USB_ATTACHED;
-
 	SetDeviceAddress(0); //设置默认地址
 }
-RESULT Joystick_Data_Setup(void) //setup的处理，输入请求类型
+RESULT yzkb_Data_Setup(void) //setup的处理，输入请求类型
 {
-	if(Device_Info.req != GET_DESCRIPTOR || //不是获取描述符或不是标准请求
-		Device_Info.type.s.req_type!=0) return USB_UNSUPPORT;
-	if(Device_Info.type.s.rx_type==0) //接收者为设备
+	if(usb_req_rxbuf.req != GET_DESCRIPTOR || //不是获取描述符或不是标准请求
+		usb_req_rxbuf.type.s.req_type!=0) return USB_UNSUPPORT;
+	if(usb_req_rxbuf.type.s.rx_type==0) //接收者为设备
 	{
-		u8 wValue1 = Device_Info.vals.b.b0;
+		u8 wValue1 = usb_req_rxbuf.vals.b.b0;
 		if (wValue1 == DEVICE_DESCRIPTOR)
 		{
-			p0_p=(u8*)Joystick_DeviceDescriptor;
-			p0_len=sizeof(Joystick_DeviceDescriptor);
+			p0_p=(u8*)yzkb_DeviceDescriptor;
+			p0_len=sizeof(yzkb_DeviceDescriptor);
 			return USB_SUCCESS;
 		}
 		else if (wValue1 == CONFIG_DESCRIPTOR)
 		{
-			p0_p=(u8*)Joystick_ConfigDescriptor;
-			p0_len=sizeof(Joystick_ConfigDescriptor);
+			p0_p=(u8*)yzkb_ConfigDescriptor;
+			p0_len=sizeof(yzkb_ConfigDescriptor);
 			return USB_SUCCESS;
 		}
 		else if (wValue1 == STRING_DESCRIPTOR)
 		{
-			switch(Device_Info.vals.b.b1)
+			switch(usb_req_rxbuf.vals.b.b1)
 			{
 			case 0:
-				p0_p=(u8*)Joystick_StringLangID;
-				p0_len=sizeof(Joystick_StringLangID);
+				p0_p=(u8*)yzkb_StringLangID;
+				p0_len=sizeof(yzkb_StringLangID);
 				break;
 			case 1:
-				p0_p=(u8*)Joystick_StringVendor;
-				p0_len=sizeof(Joystick_StringVendor);
+				p0_p=(u8*)yzkb_StringVendor;
+				p0_len=sizeof(yzkb_StringVendor);
 				break;
 			case 2:
-				p0_p=(u8*)Joystick_StringProduct;
-				p0_len=sizeof(Joystick_StringProduct);
+				p0_p=(u8*)yzkb_StringProduct;
+				p0_len=sizeof(yzkb_StringProduct);
 				break;
 			case 3:
-				p0_p=(u8*)Joystick_StringSerial;
-				p0_len=sizeof(Joystick_StringSerial);
+				p0_p=(u8*)yzkb_StringSerial;
+				p0_len=sizeof(yzkb_StringSerial);
 				break;
 			default: return USB_UNSUPPORT;
 			}
 			return USB_SUCCESS;
 		}
 	}
-	else if(Device_Info.type.s.rx_type==1 && Device_Info.inds.b.b1 < 2) //接收者为接口
+	else if(usb_req_rxbuf.type.s.rx_type==1 && usb_req_rxbuf.inds.b.b1 < 2) //接收者为接口
 	{
-		if (Device_Info.vals.b.b0 == REPORT_DESCRIPTOR)
+		if (usb_req_rxbuf.vals.b.b0 == REPORT_DESCRIPTOR)
 		{
-			if (Device_Info.inds.b.b1 == 0)
+			if (usb_req_rxbuf.inds.b.b1 == 0)
 			{
 				//发送:给指针、长度赋值，返回正确即可
 				p0_p=(u8*)KeyboardReportDescriptor;
@@ -385,20 +385,20 @@ RESULT Joystick_Data_Setup(void) //setup的处理，输入请求类型
 				return USB_SUCCESS;
 			}
 		}
-		else if (Device_Info.vals.b.b0 == HID_DESCRIPTOR_TYPE)
+		else if (usb_req_rxbuf.vals.b.b0 == HID_DESCRIPTOR_TYPE)
 		{
-			if (Device_Info.inds.b.b1 == 0)
+			if (usb_req_rxbuf.inds.b.b1 == 0)
 			{
 				//发送:给指针、长度赋值，返回正确即可
-				p0_p=(u8*)Joystick_ConfigDescriptor + KP_OFF_HID_DESC;
-				p0_len=JOYSTICK_SIZ_HID_DESC;
+				p0_p=(u8*)yzkb_ConfigDescriptor + KP_OFF_HID_DESC;
+				p0_len=YZKB_SIZ_HID_DESC;
 				return USB_SUCCESS;
 			}
 			else
 			{
 				//发送:给指针、长度赋值，返回正确即可
-				p0_p=(u8*)Joystick_ConfigDescriptor + Mouse_OFF_HID_DESC;
-				p0_len=JOYSTICK_SIZ_HID_DESC;
+				p0_p=(u8*)yzkb_ConfigDescriptor + Mouse_OFF_HID_DESC;
+				p0_len=YZKB_SIZ_HID_DESC;
 				return USB_SUCCESS;
 			}
 		}
@@ -408,7 +408,9 @@ RESULT Joystick_Data_Setup(void) //setup的处理，输入请求类型
 
 void usb_ini(void)
 {
-	Class_Data_Setup=Joystick_Data_Setup;
+	//注册回调函数
+	class_data_setup=yzkb_Data_Setup;
+	usb_reset_fun=yzkb_reset;
 
 	MGPIOA->CT8=GPIO_OUT_PP; //USB线的使能引脚
 	EP_num=3; //总共多少个端点
@@ -419,20 +421,20 @@ void usb_ini(void)
 	t0 = *(u32*)(0x1FFFF7E8);
 	t1 = *(u32*)(0x1FFFF7EC);
 	t2 = *(u32*)(0x1FFFF7F0);
-	Joystick_StringSerial[2] = (u8)(t0 & 0x000000FF);
-	Joystick_StringSerial[4] = (u8)((t0 & 0x0000FF00) >> 8);
-	Joystick_StringSerial[6] = (u8)((t0 & 0x00FF0000) >> 16);
-	Joystick_StringSerial[8] = (u8)((t0 & 0xFF000000) >> 24);
+	yzkb_StringSerial[2] = (u8)(t0 & 0x000000FF);
+	yzkb_StringSerial[4] = (u8)((t0 & 0x0000FF00) >> 8);
+	yzkb_StringSerial[6] = (u8)((t0 & 0x00FF0000) >> 16);
+	yzkb_StringSerial[8] = (u8)((t0 & 0xFF000000) >> 24);
 
-	Joystick_StringSerial[10] = (u8)(t1 & 0x000000FF);
-	Joystick_StringSerial[12] = (u8)((t1 & 0x0000FF00) >> 8);
-	Joystick_StringSerial[14] = (u8)((t1 & 0x00FF0000) >> 16);
-	Joystick_StringSerial[16] = (u8)((t1 & 0xFF000000) >> 24);
+	yzkb_StringSerial[10] = (u8)(t1 & 0x000000FF);
+	yzkb_StringSerial[12] = (u8)((t1 & 0x0000FF00) >> 8);
+	yzkb_StringSerial[14] = (u8)((t1 & 0x00FF0000) >> 16);
+	yzkb_StringSerial[16] = (u8)((t1 & 0xFF000000) >> 24);
 
-	Joystick_StringSerial[18] = (u8)(t2 & 0x000000FF);
-	Joystick_StringSerial[20] = (u8)((t2 & 0x0000FF00) >> 8);
-	Joystick_StringSerial[22] = (u8)((t2 & 0x00FF0000) >> 16);
-	Joystick_StringSerial[24] = (u8)((t2 & 0xFF000000) >> 24);
+	yzkb_StringSerial[18] = (u8)(t2 & 0x000000FF);
+	yzkb_StringSerial[20] = (u8)((t2 & 0x0000FF00) >> 8);
+	yzkb_StringSerial[22] = (u8)((t2 & 0x00FF0000) >> 16);
+	yzkb_StringSerial[24] = (u8)((t2 & 0xFF000000) >> 24);
 
 	usb_stat = USB_UNCONNECTED;
 	USB_Cable_Config(1);

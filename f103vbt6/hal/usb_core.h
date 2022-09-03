@@ -15,7 +15,7 @@ typedef enum
 
 extern DEVICE_STATE usb_stat; //usb状态
 
-typedef enum _DESCRIPTOR_TYPE
+typedef enum 
 {
 	DEVICE_DESCRIPTOR = 1,
 	CONFIG_DESCRIPTOR,
@@ -38,38 +38,13 @@ typedef enum
 	PAUSE             /* 10 */
 } S_USB_CTRL_STATE;    //usb控制状态
 
-typedef struct OneDescriptor
+typedef enum
 {
-	u8 *Descriptor;
-	u16 Descriptor_Size;
-} ONE_DESCRIPTOR, *PONE_DESCRIPTOR;
-/* All the request process routines return a value of this type
-   If the return value is not SUCCESS or NOT_READY,
-   the software will STALL the correspond endpoint */
-typedef enum _RESULT
-{
-	USB_SUCCESS = 0,    /* Process successfully */
+	USB_SUCCESS = 0,    //
 	USB_ERROR,
 	USB_UNSUPPORT,
-	USB_NOT_READY       /* The process has not been finished, endpoint will be
-						   NAK to further request */
+	USB_NOT_READY //处理未完成, 端点要发NAK
 } RESULT;
-typedef struct 
-{
-	/* 设备发送数据时
-	   CopyData() is used to get data buffer 'Length' bytes data
-	   Length为0时：CopyData() 返回数据总数
-	   if the request is not supported, returns 0
-	   if CopyData() returns -1, the calling routine should not proceed
-	   further and will resume the SETUP process by the class device
-	   Length非0时：CopyData() 返回数据位置
-	   Usb_wOffset is the Offset of original data
-	   设备接收数据时 CopyData() 用于获得数据缓存，要求长度Length字节
-	   */
-	u16  Usb_wLength; //Usb_wLength 剩余发送数
-	u16  Usb_wOffset; //发送时的分批发送的位置
-	u8   *(*CopyData)(u16 Length); //len为0时准备数据总数
-}ENDPOINT_INFO;
 
 typedef union
 {
@@ -131,32 +106,16 @@ typedef struct
 	S_U16_U8 vals;
 	S_U16_U8 inds;
 	u16 lens;
-
-	//u8 ControlState;           /* of type CONTROL_STATE */
-	ENDPOINT_INFO Ctrl_Info;
-}DEVICE_INFO;
-
-typedef struct _DEVICE_PROP
-{
-	u8* (*GetDeviceDescriptor)(u16 Length);
-	u8* (*GetConfigDescriptor)(u16 Length);
-	u8* (*GetStringDescriptor)(u16 Length);
-
-}DEVICE_PROP;
-
-void Setup0_Process(void);
-void Out0_Process(void);
-void In0_Process(void);
-
-u8 *Standard_GetDescriptorData(u16 Length, PONE_DESCRIPTOR pDesc);
+} S_USB_REQ_DATA; //请求结构
 
 void SetDeviceAddress(u8);
 void NOP_Process(void);
 
-extern u8 MaxPacketSize;
-extern DEVICE_INFO Device_Info;
-extern RESULT (*Class_Data_Setup)(void); //setup的处理回调函数
-
+extern int EP_num; //一共多少个端点
+extern int usb_max_packet; //最大包长
+extern S_USB_REQ_DATA usb_req_rxbuf; //usb端口0的标准请求接收缓存
+extern RESULT (*class_data_setup)(void); //setup的处理回调函数
+extern void (*usb_reset_fun)(void); //usb设备reset回调函数
 
 extern u16 p0_len; //剩余发送数
 extern u16 p0_ind; //发送时的分批发送的位置

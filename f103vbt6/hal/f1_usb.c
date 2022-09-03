@@ -2,7 +2,6 @@
 #include "f1_usb.h"
 #include "usb_core.h"
 
-int EP_num=1; //总共多少个端点
 void SetEPType(u8 i, u16 d) //设置端点类型
 {
 	//先清零写0无效的位，再置位写1无效的位

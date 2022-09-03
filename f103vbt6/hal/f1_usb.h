@@ -59,7 +59,6 @@ typedef struct
 /*             CNTR control register bits definitions                         */
 /******************************************************************************/
 #define CNTR_CTRM   (0x8000) /* Correct TRansfer Mask */
-#define CNTR_DOVRM  (0x4000) /* DMA OVeR/underrun Mask */
 #define CNTR_ERRM   (0x2000) /* ERRor Mask */
 #define CNTR_WKUPM  (0x1000) /* WaKe UP Mask */
 #define CNTR_SUSPM  (0x0800) /* SUSPend Mask */
@@ -109,8 +108,6 @@ typedef struct
 #define EP_TX_STALL    (0x0010) /* EndPoint TX STALLed */
 #define EP_TX_NAK      (0x0020) /* EndPoint TX NAKed */
 #define EP_TX_VALID    (0x0030) /* EndPoint TX VALID */
-//#define EPTX_DTOG1     (0x0010) /* EndPoint TX Data TOGgle bit1 */
-#define EPTX_DTOG2     (0x0020) /* EndPoint TX Data TOGgle bit2 */
 #define EPTX_DTOGMASK  (EPTX_STAT|EPREG_MASK)
 
 /* STAT_RX[1:0] STATus for RX transfer */
@@ -118,11 +115,7 @@ typedef struct
 #define EP_RX_STALL    (0x1000) /* EndPoint RX STALLed */
 #define EP_RX_NAK      (0x2000) /* EndPoint RX NAKed */
 #define EP_RX_VALID    (0x3000) /* EndPoint RX VALID */
-#define EPRX_DTOG1     (0x1000) /* EndPoint RX Data TOGgle bit1 */
-#define EPRX_DTOG2     (0x2000) /* EndPoint RX Data TOGgle bit1 */
 #define EPRX_DTOGMASK  (EPRX_STAT|EPREG_MASK)
-
-extern int EP_num;
 
 void usb_hal_ini(void);
 
@@ -134,12 +127,8 @@ void ClearDTOG_RX(u8 i);
 void ClearDTOG_TX(u8 i);
 void SetEPRxCount(u8 port, u16 n); //设置接收缓存大小
 
-uint16_t GetEPTxCount(uint8_t /*bEpNum*/);
-uint16_t GetEPRxCount(uint8_t /*bEpNum*/);
-void FreeUserBuffer(uint8_t bEpNum/*bEpNum*/, uint8_t bDir);
-
-void UserToPMABufferCopy(uint8_t *pbUsrBuf, uint16_t wPMABufAddr, uint16_t wNBytes);
-void PMAToUserBufferCopy(uint8_t *pbUsrBuf, uint16_t wPMABufAddr, uint16_t wNBytes);
+void UserToPMABufferCopy(u8 *p, u16 ind, u16 n); //将CPU数据复制到USB地址下的缓存
+void PMAToUserBufferCopy(u8 *p, u16 ind, u16 n); //将USB字复制到CPU地址下
 
 #endif
 
