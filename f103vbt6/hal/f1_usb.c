@@ -95,6 +95,14 @@ void usb_hal_ini(void) //usb片上外设初始化
 	RCC->CFGR &= ~(1<<22); //USBclk=PLLclk/1.5=48Mhz
 	RCC->APB1ENR |= RCC_APB1ENR_USBEN; //USB时钟使能
 
+	USB->CNTR=1; //重启
+	USB->CNTR=0;
+	USB->ISTR=0; //清除中断
+	USB->CNTR=CNTR_RESETM | CNTR_SUSPM | CNTR_WKUPM; //设置中断
+	/* USB interrupts initialization */
+	USB->ISTR=0;               /* clear pending interrupts */
+	USB->CNTR= CNTR_CTRM  | CNTR_WKUPM | CNTR_SUSPM | CNTR_ERRM  | CNTR_SOFM | CNTR_ESOFM | CNTR_RESETM; /* set interrupts mask */
+
 	EXTI->IMR |= 1<<18;//  开启线18上的中断
 	EXTI->RTSR |= 1<<18;//line 18上事件上升降沿触发	 
 	MY_NVIC_Init(0,0,USB_LP_CAN1_RX0_IRQn,0);

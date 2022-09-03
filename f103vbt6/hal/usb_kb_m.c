@@ -30,140 +30,6 @@ void (*pEpInt_OUT[7])(void) = //端点0没有
 	NOP_Process,
 	NOP_Process,
 };
-////////////////////////////////////////////////////////////////////////////
-//				挂起处理
-////////////////////////////////////////////////////////////////////////////
-vu16 SaveRState; //是接收中断与处理函数关于最后端点0状态的接口
-vu16 SaveTState; //是接收中断与处理函数关于最后端点0状态的接口
-
-typedef enum _RESUME_STATE
-{
-	RESUME_EXTERNAL,
-	RESUME_INTERNAL,
-	RESUME_LATER,
-	RESUME_WAIT,
-	RESUME_START,
-	RESUME_ON,
-	RESUME_OFF,
-} RESUME_STATE;
-
-void Suspend(void);
-void Resume_Init(void);
-void Resume(RESUME_STATE eResumeSetVal);
-//USB唤醒中断服务函数
-void USBWakeUp_IRQHandler(void) 
-{
-	EXTI->PR|=1<<18;//清除USB唤醒中断挂起位
-} 
-//USB中断处理函数
-void USB_LP_CAN1_RX0_IRQHandler(void) 
-{
-	vu16 t;
-	t = USB->ISTR;
-	if (t & (1<<10)) //RESET
-	{
-		USB->ISTR=(u16)~(1<<10);
-		Joystick_Reset();
-	}
-	if (t & (1<<13)) USB->ISTR=(u16)~(1<<13); //ERR 主要用于开发阶段，测量传输质量
-	if (t & (1<<12)) //WKUP唤醒
-	{
-		USB->ISTR=(u16)~(1<<12);
-		Resume(RESUME_EXTERNAL);
-	}
-	if (t & (1<<11)) //SUSP挂起
-	{
-		Suspend();
-		USB->ISTR=(u16)~(1<<11); //必须在CNTR_FSUSP之后
-	}
-	if (t & (1<<9)) USB->ISTR=(u16)~(1<<9); //SOF帧首
-	if (t & (1<<8)) //ESOF期望帧首，没收到1ms SOF
-	{
-		USB->ISTR=(u16)~(1<<8);
-	}
-	if (t & (1<<15)) //CTR端点正确传输
-	{
-		u16 ep_reg = 0; //端点寄存器值
-		while (((t = USB->ISTR) & (1<<15)) != 0) //处理完所有中断
-		{
-			u32 port = t & 0x0f; //最高优先级端点
-			if (port == 0) //0端点的处理
-			{
-				// save RX & TX status  and set both to NAK 
-				SaveRState = USB_EP(0);
-				SaveTState = SaveRState & EPTX_STAT;
-				SaveRState &=  EPRX_STAT;	
-				SetEPRxTxStatus(0,EP_RX_NAK,EP_TX_NAK); //先保存了收发状态，设置成NAK，再恢复
-				/* DIR bit = origin of the interrupt */
-				if ((t & (1<<4)) == 0) //DIR 0:IN, 1:OUT
-				{
-					/* DIR = 0      => IN  int */
-					/* DIR = 0 implies that (EP_CTR_TX = 1) always  */
-					USB_EP(0)=USB_EP(0) & (~(1<<7)) & EPREG_MASK; //清除CTR_TX
-					In0_Process();
-					/* before terminate set Tx & Rx status */
-					SetEPRxTxStatus(0,SaveRState,SaveTState);
-					return;
-				}
-				else
-				{
-					/* DIR = 1 & CTR_RX       => SETUP or OUT int */
-					/* DIR = 1 & (CTR_TX | CTR_RX) => 2 int pending */
-					ep_reg = USB_EP(0);
-					if ((ep_reg & EP_SETUP) != 0)
-					{
-						USB_EP(0)=USB_EP(0) & (~(1<<15)) & EPREG_MASK; //清除CTR_RX
-						Setup0_Process();
-						/* before terminate set Tx & Rx status */
-						SetEPRxTxStatus(0,SaveRState,SaveTState);
-						return;
-					}
-					else if ((ep_reg & (1<<15)) != 0) //CTR_RX正确接收
-					{
-						USB_EP(0)=USB_EP(0) & (~(1<<15)) & EPREG_MASK; //清除CTR_RX
-						Out0_Process();
-						/* before terminate set Tx & Rx status */
-						SetEPRxTxStatus(0,SaveRState,SaveTState);
-						return;
-					}
-				}
-			}
-			else //非控制端点中断
-			{
-				ep_reg = USB_EP(port);
-				if ((ep_reg & (1<<15)) != 0) //CTR_RX正确接收
-				{
-					USB_EP(port)=USB_EP(port) & (~(1<<15)) & EPREG_MASK; //清除CTR_RX
-					(*pEpInt_OUT[port-1])(); //端点输出回调
-				}
-				if ((ep_reg & (1<<7)) != 0) //正确发送
-				{
-					USB_EP(port)=USB_EP(port) & (~(1<<7)) & EPREG_MASK; //清除CTR_TX
-					(*pEpInt_IN[port-1])();
-				}
-			}
-		}
-	}
-} 
-void Enter_LowPowerMode(void)
-{
-	usb_stat = USB_SUSPENDED;	  
-	//进入低功耗模式
-}
-void Leave_LowPowerMode(void)
-{
-	DEVICE_INFO *pInfo = &Device_Info;
-	/* Set the device state to the correct state */
-	if (pInfo->Current_Configuration != 0)
-	{
-		usb_stat = USB_CONFIGURED; //配置完成
-	}
-	else
-	{
-		usb_stat = USB_ATTACHED;
-	}
-}
-
 void USB_Cable_Config(int e) //0不上拉，1上拉
 { 
 	if (e) PAout(8)=1;
@@ -199,7 +65,7 @@ void mouse_send(u8 *buf)
 const u8 Joystick_DeviceDescriptor[JOYSTICK_SIZ_DEVICE_DESC] =
 {
 	0x12,   //bLength */
-	USB_DEVICE_DESCRIPTOR_TYPE, //bDescriptorType设备描述符类型．固定为0x01
+	1,//USB_DEVICE_DESCRIPTOR_TYPE, //设备描述符类型．固定为0x01
 	0x00,    //bcdUSB,USB规范发布号．USB2.0=0200，1.1=0110
 	0x02,
 	0x00,  //bDeviceClass类型代码。0:所有接口在配置描述符里，且所有接口独立。1到FE:不同的接口关联。FF:厂商自定义
@@ -222,7 +88,7 @@ const u8 Joystick_ConfigDescriptor[JOYSTICK_SIZ_CONFIG_DESC] =
 {
 	//**************配置描述符***********************/
 	0x09,		//bLength字段,描述符大小．固定为0x09
-	USB_CONFIGURATION_DESCRIPTOR_TYPE,	//bDescriptorType 配置描述符类型．固定为0x02
+	2,//USB_CONFIGURATION_DESCRIPTOR_TYPE,	//配置描述符类型．固定为0x02
 	//wTotalLength字段
 	JOYSTICK_SIZ_CONFIG_DESC,//全长．此配置返回的配置描述符，接口描述符以及端点描述符的全部大小
 	0x00,
@@ -392,7 +258,7 @@ const u8 MouseReportDescriptor[Mouse_ReportDescriptor_Size]=
 const u8 Joystick_StringLangID[JOYSTICK_SIZ_STRING_LANGID] =
 {
 	JOYSTICK_SIZ_STRING_LANGID,
-	USB_STRING_DESCRIPTOR_TYPE,
+	3, //USB_STRING_DESCRIPTOR_TYPE,字符串描述符类型
 	0x09,
 	0x04
 }
@@ -401,7 +267,7 @@ const u8 Joystick_StringLangID[JOYSTICK_SIZ_STRING_LANGID] =
 const u8 Joystick_StringVendor[JOYSTICK_SIZ_STRING_VENDOR] =
 {
 	JOYSTICK_SIZ_STRING_VENDOR, // Size of Vendor string */
-	USB_STRING_DESCRIPTOR_TYPE,  // bDescriptorType*/
+	3, //USB_STRING_DESCRIPTOR_TYPE,字符串描述符类型
 	// Manufacturer: "STMicroelectronics" */
 	'S', 0, 'T', 0, 'M', 0, 'i', 0, 'c', 0, 'r', 0, 'o', 0, 'e', 0,
 	'l', 0, 'e', 0, 'c', 0, 't', 0, 'r', 0, 'o', 0, 'n', 0, 'i', 0,
@@ -411,14 +277,14 @@ const u8 Joystick_StringVendor[JOYSTICK_SIZ_STRING_VENDOR] =
 const u8 Joystick_StringProduct[JOYSTICK_SIZ_STRING_PRODUCT] =
 {
 	JOYSTICK_SIZ_STRING_PRODUCT,          // bLength */
-	USB_STRING_DESCRIPTOR_TYPE,        // bDescriptorType */
+	3, //USB_STRING_DESCRIPTOR_TYPE,字符串描述符类型
 	'S', 0, 'T', 0, 'M', 0, '3', 0, '2', 0, ' ', 0, 'J', 0,
 	'o', 0, 'y', 0, 's', 0, 't', 0, 'i', 0, 'c', 0, 'k', 0
 };
 u8 Joystick_StringSerial[JOYSTICK_SIZ_STRING_SERIAL] =
 {
 	JOYSTICK_SIZ_STRING_SERIAL,           // bLength */
-	USB_STRING_DESCRIPTOR_TYPE,        // bDescriptorType */
+	3, //USB_STRING_DESCRIPTOR_TYPE,字符串描述符类型
 	'S', 0, 'T', 0, 'M', 0, '3', 0, '2', 0, '1', 0, '0', 0
 };
 
@@ -481,8 +347,8 @@ void Joystick_Reset(void)
 	//设置端点0
 	SetEPType(0, EP_CONTROL); //设置端点0为控制端点
 	SetEPTxStatus(0, 1<<4); //TX_STALL
-	USB_BT[0].ADDR_RX = (ENDP0_RXADDR & 0xfffe);
-	USB_BT[0].ADDR_TX = (ENDP0_TXADDR & 0xfffe);
+	USB_BT[0].ADDR_RX = ENDP0_RXADDR;
+	USB_BT[0].ADDR_TX = ENDP0_TXADDR;
 	USB_EP(0)= EPREG_1_SET | //写1无效的位
 			(USB_EP(0) & (EPREG_MASK & (~(1<<8)))); //清除KIND
 	SetEPRxCount(0, MaxPacketSize);
@@ -490,19 +356,18 @@ void Joystick_Reset(void)
 
 	//设置端点1的 In 方向
 	SetEPType(1, EP_INTERRUPT); //设置端点1为中断端点类型
-	USB_BT[1].ADDR_TX = (ENDP1_TXADDR & 0xfffe); //设置发送数据的地址
-
+	USB_BT[1].ADDR_TX = ENDP1_TXADDR; //设置发送数据的地址
 	USB_BT[1].COUNT_TX = 8; //设置发送的长度
 	SetEPTxStatus(1, EP_TX_NAK); //设置端点处于忙状态
 
-	/* Initialize Endpoint Out 1 */
-	USB_BT[1].ADDR_RX = (ENDP1_RXADDR & 0xfffe); //设置接收数据的地址
+	//设置端点1的out
+	USB_BT[1].ADDR_RX = ENDP1_RXADDR; //设置接收数据的地址
 	SetEPRxCount(1, 2);  //设置接收长度
 	SetEPRxStatus(1, EP_RX_VALID); //设置端点有效，可以接收数据
 
-	/* Initialize Endpoint In 2 */
+	//设置端点2的 In 方向
 	SetEPType(2, EP_INTERRUPT); //初始化为中断端点类型
-	USB_BT[2].ADDR_TX = (ENDP2_TXADDR & 0xfffe); //设置发送数据的地址
+	USB_BT[2].ADDR_TX = ENDP2_TXADDR; //设置发送数据的地址
 	USB_BT[2].COUNT_TX = 5; //设置发送的长度
 	SetEPTxStatus(2, EP_TX_NAK); //设置端点处于忙状态
 
@@ -510,13 +375,6 @@ void Joystick_Reset(void)
 
 	SetDeviceAddress(0); //设置默认地址
 }
-/*******************************************************************************
- * Function Name  : Joystick_Data_Setup
- * Description    : Handle the data class specific requests.
- * Input          : Request Nb.
- * Output         : None.
- * Return         : USB_UNSUPPORT or USB_SUCCESS.
- *******************************************************************************/
 RESULT Joystick_Data_Setup(u8 RequestNo)
 {
 	u8 *(*CopyRoutine)(u16);
@@ -548,47 +406,19 @@ RESULT Joystick_Data_Setup(u8 RequestNo)
 	(*CopyRoutine)(0); //设置len为0
 	return USB_SUCCESS;
 }
-/*******************************************************************************
- * Function Name  : Joystick_GetDeviceDescriptor.
- * Description    : Gets the device descriptor.
- * Input          : Length
- * Output         : None.
- * Return         : The address of the device descriptor.
- *******************************************************************************/
 u8 *Joystick_GetDeviceDescriptor(u16 Length)
 {
 	return Standard_GetDescriptorData(Length, &Device_Descriptor);
 }
-/*******************************************************************************
- * Function Name  : Joystick_GetConfigDescriptor.
- * Description    : Gets the configuration descriptor.
- * Input          : Length
- * Output         : None.
- * Return         : The address of the configuration descriptor.
- *******************************************************************************/
 u8 *Joystick_GetConfigDescriptor(u16 Length)
 {
 	return Standard_GetDescriptorData(Length, &Config_Descriptor);
 }
-/*******************************************************************************
- * Function Name  : Joystick_GetStringDescriptor
- * Description    : Gets the string descriptors according to the needed index
- * Input          : Length
- * Output         : None.
- * Return         : The address of the string descriptors.
- *******************************************************************************/
 u8 *Joystick_GetStringDescriptor(u16 Length)
 {
 	u8 wValue0 = Device_Info.vals.b.b1;
 	return Standard_GetDescriptorData(Length, &String_Descriptor[wValue0]);
 }
-/*******************************************************************************
- * Function Name  : Joystick_GetReportDescriptor.
- * Description    : Gets the HID report descriptor.
- * Input          : Length
- * Output         : None.
- * Return         : The address of the configuration descriptor.
- *******************************************************************************/
 u8 *KP_GetReportDescriptor(u16 Length)
 {
 	return Standard_GetDescriptorData(Length, &KP_Report_Descriptor);
@@ -597,13 +427,6 @@ u8 *Mouse_GetReportDescriptor(u16 Length)
 {
 	return Standard_GetDescriptorData(Length, &Mouse_Report_Descriptor);
 }
-/*******************************************************************************
- * Function Name  : Joystick_GetHIDDescriptor.
- * Description    : Gets the HID descriptor.
- * Input          : Length
- * Output         : None.
- * Return         : The address of the configuration descriptor.
- *******************************************************************************/
 u8 *KP_GetHIDDescriptor(u16 Length)
 {
 	return Standard_GetDescriptorData(Length, &KP_Hid_Descriptor);
@@ -613,137 +436,12 @@ u8 *Mouse_GetHIDDescriptor(u16 Length)
 	return Standard_GetDescriptorData(Length, &Mouse_Hid_Descriptor);
 }
 
-vu32 EP[8];
-struct
-{
-	__IO RESUME_STATE eState;
-	vu8 bESOFcnt;
-} ResumeS;
-
-vu32 remotewakeupon=0;
-void Suspend(void)
-{
-	u16 i,t;
-
-	for(i=0;i<8;i++) EP[i] = USB_EP(i); //保存端点寄存器的值
-	t = USB->CNTR; //读-修改-写操作，缓存以后只需读一次 
-	t |= (1<<10); USB->CNTR=t; //RESETM：复位中断使能
-	t |= (1<<0);  USB->CNTR=t; //FRES：强制复位
-	t &= ~(1<<0); USB->CNTR=t; //需要人工去掉复位状态
-
-	while((USB->ISTR & (1<<10)) == 0); //RESET标志
-	USB->ISTR = ~(1<<10); //清除RESET标志
-
-	for (i=0;i<8;i++) USB_EP(i)= EP[i]; //恢复保存的端点寄存器。写1翻转的也行？
-	//现在能安全的进入强制挂起
-	t |= (1<<3); //FSUSP强制挂起
-	USB->CNTR=t;
-
-	/* force low-power mode in the macrocell */
-	//t = USB->CNTR;
-	t |= (1<<2); //LPMODE低功耗模式
-	USB->CNTR=t;
-
-	Enter_LowPowerMode();
-}
-/*******************************************************************************
- * Function Name  : Resume_Init
- * Description    : Handles wake-up restoring normal operations
- * Input          : None.
- * Output         : None.
- * Return         : USB_SUCCESS.
- *******************************************************************************/
-void Resume_Init(void)
-{
-	u16 t;
-	/* ------------------ ONLY WITH BUS-POWERED DEVICES ---------------------- */
-	/* restart the clocks */
-	/* CNTR_LPMODE = 0 */
-	t = USB->CNTR;
-	t &= (~CNTR_LPMODE);
-	USB->CNTR=t;
-	/* restore full power */
-	/* ... on connected devices */
-	Leave_LowPowerMode();
-	/* reset FSUSP bit */
-	USB->CNTR=CNTR_CTRM  | CNTR_WKUPM | CNTR_SUSPM | CNTR_ERRM  | CNTR_SOFM | CNTR_ESOFM | CNTR_RESETM;
-	/* reverse suspend preparation */
-}
-/*******************************************************************************
- * Function Name  : Resume
- * Description    : This is the state machine handling resume operations and
- *                 timing sequence. The control is based on the Resume structure
- *                 variables and on the ESOF interrupt calling this subroutine
- *                 without changing machine state.
- * Input          : a state machine value (RESUME_STATE)
- *                  RESUME_ESOF doesn't change ResumeS.eState allowing
- *                  decrementing of the ESOF counter in different states.
- * Output         : None.
- * Return         : None.
- *******************************************************************************/
-void Resume(RESUME_STATE eResumeSetVal)
-{
-	u16 wCNTR;
-
-	ResumeS.eState = eResumeSetVal;
-	switch (ResumeS.eState)
-	{
-	case RESUME_EXTERNAL:
-		if (remotewakeupon ==0)
-		{
-			Resume_Init();
-			ResumeS.eState = RESUME_OFF;
-		}
-		else /* RESUME detected during the RemoteWAkeup signalling => keep RemoteWakeup handling*/
-		{
-			ResumeS.eState = RESUME_ON;
-		}
-		break;
-	case RESUME_INTERNAL:
-		Resume_Init();
-		ResumeS.eState = RESUME_START;
-		remotewakeupon = 1;
-		break;
-	case RESUME_LATER:
-		ResumeS.bESOFcnt = 2;
-		ResumeS.eState = RESUME_WAIT;
-		break;
-	case RESUME_WAIT:
-		ResumeS.bESOFcnt--;
-		if (ResumeS.bESOFcnt == 0)
-			ResumeS.eState = RESUME_START;
-		break;
-	case RESUME_START:
-		wCNTR = USB->CNTR;
-		wCNTR |= CNTR_RESUME;
-		USB->CNTR=wCNTR;
-		ResumeS.eState = RESUME_ON;
-		ResumeS.bESOFcnt = 10;
-		break;
-	case RESUME_ON:    
-		ResumeS.bESOFcnt--;
-		if (ResumeS.bESOFcnt == 0)
-		{
-			wCNTR = USB->CNTR;
-			wCNTR &= (~CNTR_RESUME);
-			USB->CNTR=wCNTR;
-			ResumeS.eState = RESUME_OFF;
-			remotewakeupon = 0;
-		}
-		break;
-	case RESUME_OFF:
-	default:
-		ResumeS.eState = RESUME_OFF;
-		break;
-	}
-}
 void usb_ini(void)
 {
 	MGPIOA->CT8=GPIO_OUT_PP; //USB线的使能引脚
 	EP_num=3; //总共多少个端点
 	usb_hal_ini(); //初始化硬件
 
-	Device_Info.ControlState = 2;
 	//初始化设备
 	u32 t0, t1, t2;
 	t0 = *(u32*)(0x1FFFF7E8);
@@ -763,15 +461,6 @@ void usb_ini(void)
 	Joystick_StringSerial[20] = (u8)((t2 & 0x0000FF00) >> 8);
 	Joystick_StringSerial[22] = (u8)((t2 & 0x00FF0000) >> 16);
 	Joystick_StringSerial[24] = (u8)((t2 & 0xFF000000) >> 24);
-
-	/* Connect the device */
-	USB->CNTR=1; //重启
-	USB->CNTR=0;
-	USB->ISTR=0; //清除中断
-	USB->CNTR=CNTR_RESETM | CNTR_SUSPM | CNTR_WKUPM; //设置中断
-	/* USB interrupts initialization */
-	USB->ISTR=0;               /* clear pending interrupts */
-	USB->CNTR= CNTR_CTRM  | CNTR_WKUPM | CNTR_SUSPM | CNTR_ERRM  | CNTR_SOFM | CNTR_ESOFM | CNTR_RESETM; /* set interrupts mask */
 
 	usb_stat = USB_UNCONNECTED;
 	USB_Cable_Config(1);

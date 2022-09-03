@@ -23,11 +23,6 @@ typedef enum _DESCRIPTOR_TYPE
 	INTERFACE_DESCRIPTOR,
 	ENDPOINT_DESCRIPTOR
 } DESCRIPTOR_TYPE;
-typedef enum _FEATURE_SELECTOR //Feature selector of a SET_FEATURE or CLEAR_FEATURE
-{
-	ENDPOINT_STALL,
-	DEVICE_REMOTE_WAKEUP
-} FEATURE_SELECTOR;
 
 typedef enum 
 {
@@ -41,7 +36,7 @@ typedef enum
 	WAIT_STATUS_OUT,  /* 8 */
 	STALLED,          /* 9 */
 	PAUSE             /* 10 */
-} CONTROL_STATE;    /* The state machine states of a control pipe */
+} S_USB_CTRL_STATE;    //usb控制状态
 
 typedef struct OneDescriptor
 {
@@ -138,8 +133,7 @@ typedef struct
 	S_U16_U8 inds;
 	u16 lens;
 
-	u8 ControlState;           /* of type CONTROL_STATE */
-	u8 Current_Configuration;   /* Selected configuration */
+	//u8 ControlState;           /* of type CONTROL_STATE */
 	ENDPOINT_INFO Ctrl_Info;
 }DEVICE_INFO;
 
@@ -153,10 +147,9 @@ typedef struct _DEVICE_PROP
 
 }DEVICE_PROP;
 
-u8 Setup0_Process(void);
-u8 Post0_Process(void);
-u8 Out0_Process(void);
-u8 In0_Process(void);
+void Setup0_Process(void);
+void Out0_Process(void);
+void In0_Process(void);
 
 u8 *Standard_GetDescriptorData(u16 Length, PONE_DESCRIPTOR pDesc);
 
