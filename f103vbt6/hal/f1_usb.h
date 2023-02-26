@@ -2,6 +2,7 @@
 #define F1_USB_H
 
 #include "stm32f1_sys.h"
+#include "usb_core.h"
 
 typedef struct
 {
@@ -117,18 +118,24 @@ typedef struct
 #define EP_RX_VALID    (0x3000) /* EndPoint RX VALID */
 #define EPRX_DTOGMASK  (EPRX_STAT|EPREG_MASK)
 
+extern int EP_num; //一共多少个端点
+extern void (*pEpInt_IN[7])(void);//端点0没有
+extern void (*pEpInt_OUT[7])(void);//端点0没有
+
 void usb_hal_ini(void);
 
 void SetEPType(u8 i, u16 wType); //设置端点类型
 void SetEPTxStatus(u8 i, u16 d); //设置端点发送状态
 void SetEPRxStatus(u8 i, u16 d); //设置端点接收状态
 void SetEPRxTxStatus(u8 i, u16 rx,u16 tx); //设置端点发送、接收状态
-void ClearDTOG_RX(u8 i);
-void ClearDTOG_TX(u8 i);
 void SetEPRxCount(u8 port, u16 n); //设置接收缓存大小
 
 void UserToPMABufferCopy(u8 *p, u16 ind, u16 n); //将CPU数据复制到USB地址下的缓存
 void PMAToUserBufferCopy(u8 *p, u16 ind, u16 n); //将USB字复制到CPU地址下
+
+void usb_ep0_send_prepare(u8 *p,int n); //端点0发送准备，给枚举流程用
+void usb_get_req_rxbuf(u8 *p,int n); //枚举时，从端点0缓冲区获取下发的请求
+void SetDeviceAddress(u8 Val); //设置设备地址和端点地址
 
 #endif
 

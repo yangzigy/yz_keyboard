@@ -1,5 +1,5 @@
 #include "stm32f1_sys.h"
-#include "usb_core.h"
+#include "f1_usb.h"
 #include "usb_kb_m.h"
 
 const u8 KeyboardReportDescriptor[KP_ReportDescriptor_Size];
@@ -11,27 +11,6 @@ void EP1_OUT_Callback(void)
 {
 	SetEPRxStatus(1, 3<<12); //RX_VALID
 }
-void (*pEpInt_IN[7])(void) = //端点0没有
-{
-	NOP_Process,
-	NOP_Process,
-	NOP_Process,
-	NOP_Process,
-	NOP_Process,
-	NOP_Process,
-	NOP_Process,
-};
-
-void (*pEpInt_OUT[7])(void) = //端点0没有
-{
-	EP1_OUT_Callback,
-	NOP_Process,
-	NOP_Process,
-	NOP_Process,
-	NOP_Process,
-	NOP_Process,
-	NOP_Process,
-};
 void USB_Cable_Config(int e) //0不上拉，1上拉
 { 
 	if (e) PAout(8)=1;
@@ -48,7 +27,7 @@ void keyboard_send(u8 *buf)
 	keyboard_send_pre_0=((u32*)buf)[0];
 	keyboard_send_pre_1=((u32*)buf)[1];
 	UserToPMABufferCopy(buf, USB_BT[1].ADDR_TX, 8);
-	SetEPTxStatus(1, 3<<4); //TX_VALID可用于发送
+	SetEPTxStatus(1, EP_TX_VALID); //(3<<4):TX_VALID表示准备好发送数据了
 }
 u32 mouse_send_pre=0; //上次发送值
 void mouse_send(u8 *buf)
@@ -59,7 +38,7 @@ void mouse_send(u8 *buf)
 	}
 	mouse_send_pre=((u32*)(buf+1))[0];
 	UserToPMABufferCopy(buf, USB_BT[2].ADDR_TX, 5);
-	SetEPTxStatus(2, 3<<4); //TX_VALID可用于发送
+	SetEPTxStatus(2, EP_TX_VALID); //(3<<4):TX_VALID表示准备好发送数据了
 }
 
 //设备描述符，配置描述符，字符串描述符，接口描述符，端点描述符
@@ -291,7 +270,7 @@ u8 yzkb_StringSerial[YZKB_SIZ_STRING_SERIAL] =
 
 void yzkb_reset(void)
 {
-	USB->BTABLE =0;
+	USB->BTABLE =0; //分组缓冲区描述表的起始地址。指示每个端点分组缓冲区地址和大小
 
 	//设置端点0
 	SetEPType(0, EP_CONTROL); //设置端点0为控制端点
@@ -322,7 +301,7 @@ void yzkb_reset(void)
 
 	SetDeviceAddress(0); //设置默认地址
 }
-RESULT yzkb_Data_Setup(void) //setup的处理，输入请求类型
+RESULT yzkb_Data_Setup(void) //setup的处理，输入请求类型，给发送地址和长度
 {
 	if(usb_req_rxbuf.req != GET_DESCRIPTOR || //不是获取描述符或不是标准请求
 		usb_req_rxbuf.type.s.req_type!=0) return USB_UNSUPPORT;
@@ -411,10 +390,11 @@ void usb_ini(void)
 	//注册回调函数
 	class_data_setup=yzkb_Data_Setup;
 	usb_reset_fun=yzkb_reset;
+	pEpInt_OUT[0]=EP1_OUT_Callback;
 
 	MGPIOA->CT8=GPIO_OUT_PP; //USB线的使能引脚
 	EP_num=3; //总共多少个端点
-	usb_hal_ini(); //初始化硬件
+	usb_hal_ini(); //初始化硬件（开中断）
 
 	//初始化设备
 	u32 t0, t1, t2;

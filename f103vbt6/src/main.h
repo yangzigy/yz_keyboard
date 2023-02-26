@@ -24,15 +24,18 @@
 #endif
 
 #ifdef __cplusplus
-//#include <iostream>
-//#include <string>
-//#include <fstream>
-//#include <sstream>
-//#include <vector>
-//#include <algorithm>
-//#include <numeric>
-//#include <list>
-//#include <map>
+#ifndef MCU_PROJ
+#include <iostream>
+#include <string>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <algorithm>
+#include <numeric>
+#include <list>
+#include <map>
+#include <queue>
+#endif
 #ifdef USECPP11 
 #include <tuple>
 #include <regex>
@@ -64,10 +67,8 @@ typedef volatile signed short vs16;
 typedef volatile signed int vs32;
 typedef volatile signed long long vs64;
 
-//typedef unsigned long long t_maxu; //最大的整形
-//typedef signed long long t_maxs;
-typedef unsigned int t_maxu; //最大的整形
-typedef signed int t_maxs;
+typedef unsigned long long t_maxu; //最大的整形
+typedef signed long long t_maxs;
 
 //定义精度误差
 #define Eps	(1e-6)
@@ -118,7 +119,26 @@ typedef signed int t_maxs;
 				(((n)&0x000000ff00000000)>>8) | (((n)&0x0000ff0000000000)>>24) | \
 				(((n)&0x00ff000000000000)>>40) | (((n)&0xff00000000000000)>>56) )
 
+//简单互斥操作,双线程互斥
+//结构使用:	int[2]，1占用，分别代表两个线程的占用情况
+#define BM_LOCK(m,n)	do \
+{\
+	m[n]=1; \
+	if(m[1-n]==0) break; \
+	m[n]=0; \
+} while(1)
+//1、表示自己想占用
+//2、判断是否对方占用
+//3、若对方占用则退出占用，重来
+#define BM_UNLOCK(m,n)	m[n]=0	 //解锁
+
 //数值工具
+typedef union
+{
+	u32 dw;
+	u8 b[4];
+} TYPE_u32u8;
+#define FLOAT_2_INT(f)		((f)<0)? (int)((f)-0.5f) : (int)((f)+0.5f) //四舍五入
 #define MINMAX(d,min,max) if((d)<(min)) (d)=(min); else if((d)>(max)) (d)=(max);
 #define ARRAY_SIZE(d) (sizeof(d)/sizeof(d[0])) //数组长度
 #define PDBG	 printf("%s:%d\n",__FILE__,__LINE__)
